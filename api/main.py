@@ -233,6 +233,27 @@ def _register_routes(app: FastAPI) -> None:
 
         depth = await queue.depth() if sqlite_ok else 0
 
+        # Compose a runtime-aware llm_disabled_reason that surfaces both
+        # config-time issues (settings.llm_disabled_reason populated when
+        # a provider isn't configured) AND runtime degradation (a provider
+        # is configured but rate-limited or unreachable right now).
+        reasons: list[str] = []
+        if settings.llm_disabled_reason:
+            reasons.append(settings.llm_disabled_reason)
+        for name in ("openai", "hermes_harness"):
+            st = llm_status.get(name)
+            if st == "rate_limited":
+                reasons.append(
+                    f"{name}: rate-limited (quota window — retries should "
+                    "recover within ~1 minute)."
+                )
+            elif st == "unavailable":
+                reasons.append(
+                    f"{name}: unavailable (probe failed — check provider "
+                    "status, network, or API key validity)."
+                )
+        composed_reason = " ".join(reasons) if reasons else ""
+
         return HealthResponse(
             api="ok",
             sqlite="ok" if sqlite_ok else "down",
@@ -248,7 +269,7 @@ def _register_routes(app: FastAPI) -> None:
             tenant_icon=settings.hermes_tenant_icon,
             public_url=settings.hermes_public_url,
             version=API_VERSION,
-            llm_disabled_reason=settings.llm_disabled_reason,
+            llm_disabled_reason=composed_reason,
         )
 
     # ---------------- Recommendations ----------------

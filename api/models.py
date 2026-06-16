@@ -316,8 +316,11 @@ class ActionResult(BaseModel):
 
 
 class LLMHealth(BaseModel):
-    openai: Literal["ok", "unavailable", "disabled"]
-    hermes_harness: Literal["ok", "unavailable", "disabled"]
+    # 'rate_limited' added to surface free-tier quota exhaustion distinctly
+    # from outright unavailability; the UI flips the pill to amber rather
+    # than red and shows a wait-time hint instead of an alarming banner.
+    openai: Literal["ok", "unavailable", "disabled", "rate_limited"]
+    hermes_harness: Literal["ok", "unavailable", "disabled", "rate_limited"]
 
 
 class BridgesHealth(BaseModel):

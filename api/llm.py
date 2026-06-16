@@ -26,6 +26,10 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = httpx.Timeout(60.0, connect=10.0)
 HEALTH_TIMEOUT = httpx.Timeout(5.0, connect=5.0)
+# Number of recent probe results to keep for the debounced health status.
+# A single 'ok' in this window rescues from a transient flap (e.g.
+# Gemini's free-tier rate-limit windows or Odoo session re-auth gaps).
+_HEALTH_WINDOW = 3
 
 
 def _redact_key(api_key: str) -> str:
@@ -95,6 +99,9 @@ class LLMClient:
         self._default_model = default_model
         self._client: Optional[httpx.AsyncClient] = None
         self._lock = asyncio.Lock()
+        # Rolling window of recent health probe results for hysteresis.
+        # See health() / _debounced_status() for the consumption side.
+        self._recent_probes: List[str] = []
 
     @property
     def provider_name(self) -> str:
@@ -224,20 +231,53 @@ class LLMClient:
     # ------------------------------------------------------------------
 
     async def health(self) -> str:
-        """Return 'ok' on a successful /v1/models call, else 'unavailable'."""
+        """Return a debounced health status — 'ok' / 'unavailable' / 'rate_limited'.
+
+        Recent probe results (last _HEALTH_WINDOW) are tracked, and a final
+        status is computed with hysteresis:
+          * ANY recent 'ok' → 'ok' (a single success rescues from flap)
+          * ALL recent failures → the most-recent failure category
+        This stops free-tier rate-limit windows from generating alarming
+        UI banners during what is, operationally, normal degraded throughput.
+        """
         client = await self._ensure_client()
         try:
             resp = await client.get("/models", timeout=HEALTH_TIMEOUT)
         except (httpx.RequestError, httpx.HTTPStatusError):
+            self._record_probe("unavailable")
+            return self._debounced_status()
+        if resp.status_code == 200:
+            try:
+                data = resp.json()
+            except ValueError:
+                self._record_probe("unavailable")
+                return self._debounced_status()
+            items = data.get("data") or []
+            self._record_probe("ok" if items else "unavailable")
+            return self._debounced_status()
+        if resp.status_code == 429:
+            self._record_probe("rate_limited")
+            return self._debounced_status()
+        # 401/403/404/5xx — all treated as unavailable.
+        self._record_probe("unavailable")
+        return self._debounced_status()
+
+    def _record_probe(self, result: str) -> None:
+        """Track the last few probe results in a rolling window."""
+        self._recent_probes.append(result)
+        if len(self._recent_probes) > _HEALTH_WINDOW:
+            self._recent_probes.pop(0)
+
+    def _debounced_status(self) -> str:
+        """Compute a status from recent probes with single-success hysteresis."""
+        if not self._recent_probes:
             return "unavailable"
-        if resp.status_code != 200:
-            return "unavailable"
-        try:
-            data = resp.json()
-        except ValueError:
-            return "unavailable"
-        items = data.get("data") or []
-        return "ok" if items else "unavailable"
+        # A single 'ok' in the window rescues us from flap.
+        if "ok" in self._recent_probes:
+            return "ok"
+        # All failures — use the most-recent failure category so the UI
+        # surfaces the right reason (rate_limited vs unavailable).
+        return self._recent_probes[-1]
 
     async def list_models(self) -> List[str]:
         client = await self._ensure_client()

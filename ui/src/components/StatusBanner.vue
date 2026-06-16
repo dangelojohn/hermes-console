@@ -20,18 +20,23 @@ const bannerMessage = computed(() => {
   }
   if (store.writesBlocked) return 'SQLite down — writes blocked.';
   const llm = store.health.llm || {};
-  // Only treat 'unavailable' as a warning. 'disabled' = intentionally
-  // not configured (no key/url in .env), which is a normal state — not
-  // worth flagging. 'unknown' / undefined also stays silent.
+  // Treat 'unavailable' (probe failed — needs operator attention) and
+  // 'rate_limited' (free-tier quota window — should self-recover) as
+  // banner-worthy states. 'disabled' = intentionally not configured,
+  // not a problem. 'ok' / 'unknown' / undefined stay silent.
+  const limited = Object.entries(llm).filter(([, v]) => v === 'rate_limited').map(([k]) => k);
   const dead = Object.entries(llm).filter(([, v]) => v === 'unavailable').map(([k]) => k);
   if (dead.length) return `LLM provider(s) unavailable: ${dead.join(', ')}.`;
+  if (limited.length) return `LLM provider(s) rate-limited: ${limited.join(', ')}. Should self-recover within ~1 minute.`;
   return 'All systems operational.';
 });
 
 function pillClass(state) {
   if (state === 'ok') return 'pill-ok';
   if (state === 'unknown' || state === undefined || state === null) return 'pill-info';
-  return 'pill-err';
+  if (state === 'disabled') return 'pill-info';        // intentional, not a problem
+  if (state === 'rate_limited') return 'pill-warn';    // self-recovering soon
+  return 'pill-err';                                    // unavailable / unreachable
 }
 
 const llmEntries = computed(() => Object.entries(store.health.llm || {}));
