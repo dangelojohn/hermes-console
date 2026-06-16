@@ -240,7 +240,7 @@ def _register_routes(app: FastAPI) -> None:
         reasons: list[str] = []
         if settings.llm_disabled_reason:
             reasons.append(settings.llm_disabled_reason)
-        for name in ("openai", "hermes_harness"):
+        for name in ("openai", "hermes_harness", "anthropic"):
             st = llm_status.get(name)
             if st == "rate_limited":
                 reasons.append(
@@ -260,6 +260,7 @@ def _register_routes(app: FastAPI) -> None:
             llm=LLMHealth(
                 openai=llm_status.get("openai", "disabled"),  # type: ignore[arg-type]
                 hermes_harness=llm_status.get("hermes_harness", "disabled"),  # type: ignore[arg-type]
+                anthropic=llm_status.get("anthropic", "disabled"),  # type: ignore[arg-type]
             ),
             bridges=BridgesHealth(
                 southbrook_hermes=bridges_status["southbrook_hermes"],  # type: ignore[arg-type]

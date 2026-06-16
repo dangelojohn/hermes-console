@@ -305,11 +305,243 @@ class LLMClient:
         return out
 
 
+class AnthropicLLMClient:
+    """Anthropic /v1/messages client mirroring the LLMClient interface.
+
+    Anthropic does NOT expose an OpenAI-compatible endpoint, so we can't
+    reuse :class:`LLMClient`. The wire format differs: separate ``system``
+    field at top level, ``max_tokens`` is required, content blocks instead
+    of a flat string, ``x-api-key`` header (not Bearer), and
+    ``anthropic-version`` header required on every call.
+    """
+
+    _ANTHROPIC_VERSION = "2023-06-01"
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        base_url: str,
+        default_model: str,
+        default_max_tokens: int = 4096,
+    ) -> None:
+        if not api_key:
+            raise ValueError("anthropic: api_key required")
+        if not base_url:
+            raise ValueError("anthropic: base_url required")
+        self._provider_name = "anthropic"
+        self._api_key = api_key
+        self._base_url = base_url.rstrip("/")
+        self._default_model = default_model
+        self._default_max_tokens = default_max_tokens
+        self._client: Optional[httpx.AsyncClient] = None
+        self._lock = asyncio.Lock()
+        self._recent_probes: List[str] = []
+
+    @property
+    def provider_name(self) -> str:
+        return self._provider_name
+
+    @property
+    def default_model(self) -> str:
+        return self._default_model
+
+    async def startup(self) -> None:
+        async with self._lock:
+            if self._client is None:
+                self._client = httpx.AsyncClient(
+                    base_url=self._base_url,
+                    timeout=DEFAULT_TIMEOUT,
+                    headers={
+                        "x-api-key": self._api_key,
+                        "anthropic-version": self._ANTHROPIC_VERSION,
+                        "Content-Type": "application/json",
+                    },
+                )
+        logger.info(
+            "llm client ready provider=%s base=%s key=%s model=%s",
+            self._provider_name,
+            self._base_url,
+            _redact_key(self._api_key),
+            self._default_model,
+        )
+
+    async def shutdown(self) -> None:
+        async with self._lock:
+            if self._client is not None:
+                await self._client.aclose()
+                self._client = None
+
+    async def _ensure_client(self) -> httpx.AsyncClient:
+        if self._client is None:
+            await self.startup()
+        assert self._client is not None
+        return self._client
+
+    async def chat(
+        self,
+        messages: List[Dict[str, Any]],
+        *,
+        model: Optional[str] = None,
+        **opts: Any,
+    ) -> ChatResponse:
+        client = await self._ensure_client()
+        chosen_model = model or self._default_model
+        if not chosen_model:
+            raise LLMUnavailable("anthropic: no model configured")
+
+        system_text, claude_messages = self._split_messages(messages)
+
+        max_tokens = opts.pop("max_tokens", None) or self._default_max_tokens
+        body: Dict[str, Any] = {
+            "model": chosen_model,
+            "max_tokens": int(max_tokens),
+            "messages": claude_messages,
+        }
+        if system_text:
+            body["system"] = system_text
+        for k in ("temperature", "top_p", "stop_sequences", "metadata"):
+            if k in opts and opts[k] is not None:
+                body[k] = opts[k]
+
+        try:
+            resp = await client.post("/messages", json=body)
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
+            raise LLMUnavailable(
+                f"anthropic: transport error ({exc.__class__.__name__})"
+            ) from exc
+        except httpx.RequestError as exc:
+            raise LLMUnavailable(
+                f"anthropic: request error ({exc.__class__.__name__})"
+            ) from exc
+
+        if resp.status_code >= 500:
+            raise LLMUnavailable(f"anthropic: 5xx from upstream ({resp.status_code})")
+        if resp.status_code == 401:
+            raise LLMRejected("anthropic: auth rejected (401)")
+        if resp.status_code == 429:
+            detail = resp.text[:400]
+            raise LLMRateLimited(
+                f"anthropic: 429 (rate limited / quota exhausted) {detail}"
+            )
+        if resp.status_code >= 400:
+            detail = resp.text[:400]
+            raise LLMRejected(f"anthropic: {resp.status_code} {detail}")
+
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            raise LLMUnavailable("anthropic: non-json response") from exc
+
+        content_blocks = data.get("content") or []
+        text_parts = [
+            b.get("text", "")
+            for b in content_blocks
+            if isinstance(b, dict) and b.get("type") == "text"
+        ]
+        content = "".join(text_parts)
+        usage = data.get("usage") or {}
+        # Translate Anthropic's input/output_tokens → OpenAI-shape totals
+        # so downstream code (analytics, accounting) doesn't need to know
+        # which provider answered.
+        prompt = int(usage.get("input_tokens") or 0)
+        completion = int(usage.get("output_tokens") or 0)
+        return ChatResponse(
+            content=content,
+            model=data.get("model") or chosen_model,
+            usage={
+                "prompt_tokens": prompt,
+                "completion_tokens": completion,
+                "total_tokens": prompt + completion,
+            },
+        )
+
+    @staticmethod
+    def _split_messages(
+        messages: List[Dict[str, Any]],
+    ) -> tuple[str, List[Dict[str, Any]]]:
+        """Extract OpenAI-style system messages into Anthropic's top-level field.
+
+        Anthropic puts the system prompt at the request root, not as the
+        first message. We concatenate any system messages (newline-joined)
+        and keep only user/assistant turns in ``messages``.
+        """
+        system_parts: List[str] = []
+        out: List[Dict[str, Any]] = []
+        for m in messages:
+            role = m.get("role")
+            if role == "system":
+                content = m.get("content") or ""
+                if isinstance(content, str) and content:
+                    system_parts.append(content)
+            elif role in ("user", "assistant"):
+                out.append({"role": role, "content": m.get("content") or ""})
+        return "\n\n".join(system_parts), out
+
+    async def health(self) -> str:
+        client = await self._ensure_client()
+        try:
+            resp = await client.get("/models", timeout=HEALTH_TIMEOUT)
+        except (httpx.RequestError, httpx.HTTPStatusError):
+            self._record_probe("unavailable")
+            return self._debounced_status()
+        if resp.status_code == 200:
+            try:
+                data = resp.json()
+            except ValueError:
+                self._record_probe("unavailable")
+                return self._debounced_status()
+            items = data.get("data") or []
+            self._record_probe("ok" if items else "unavailable")
+            return self._debounced_status()
+        if resp.status_code == 429:
+            self._record_probe("rate_limited")
+            return self._debounced_status()
+        self._record_probe("unavailable")
+        return self._debounced_status()
+
+    def _record_probe(self, result: str) -> None:
+        self._recent_probes.append(result)
+        if len(self._recent_probes) > _HEALTH_WINDOW:
+            self._recent_probes.pop(0)
+
+    def _debounced_status(self) -> str:
+        if not self._recent_probes:
+            return "unavailable"
+        if "ok" in self._recent_probes:
+            return "ok"
+        return self._recent_probes[-1]
+
+    async def list_models(self) -> List[str]:
+        client = await self._ensure_client()
+        try:
+            resp = await client.get("/models")
+        except httpx.RequestError:
+            return []
+        if resp.status_code != 200:
+            return []
+        try:
+            data = resp.json()
+        except ValueError:
+            return []
+        items = data.get("data") or []
+        out: List[str] = []
+        for item in items:
+            mid = item.get("id") if isinstance(item, dict) else None
+            if isinstance(mid, str):
+                # Strip "models/" prefix if present so caller can pass the
+                # bare id back as ``model=``. (Anthropic returns bare ids
+                # today, but the Gemini OpenAI-compat shim returns prefixed
+                # ones, and the symmetry is nicer here.)
+                out.append(mid[len("models/") :] if mid.startswith("models/") else mid)
+        return out
+
+
 class ProviderRegistry:
     """Holds the configured providers and serves them up by name."""
 
     def __init__(self) -> None:
-        self._providers: Dict[str, LLMClient] = {}
+        self._providers: Dict[str, Any] = {}
 
     @classmethod
     def from_settings(cls, settings: Any) -> "ProviderRegistry":
@@ -328,6 +560,13 @@ class ProviderRegistry:
                 base_url=settings.hermes_harness_base_url,
                 default_model=settings.hermes_harness_default_model,
             )
+        if getattr(settings, "anthropic_api_key", ""):
+            reg._providers["anthropic"] = AnthropicLLMClient(
+                api_key=settings.anthropic_api_key,
+                base_url=settings.anthropic_base_url,
+                default_model=settings.anthropic_default_model,
+                default_max_tokens=settings.anthropic_default_max_tokens,
+            )
         return reg
 
     async def startup(self) -> None:
@@ -341,7 +580,7 @@ class ProviderRegistry:
     def has(self, provider_name: str) -> bool:
         return provider_name in self._providers
 
-    def get(self, provider_name: str) -> LLMClient:
+    def get(self, provider_name: str) -> Any:
         client = self._providers.get(provider_name)
         if client is None:
             raise ProviderNotConfigured(
@@ -353,7 +592,11 @@ class ProviderRegistry:
         return list(self._providers.keys())
 
     async def health(self) -> Dict[str, str]:
-        out: Dict[str, str] = {"openai": "disabled", "hermes_harness": "disabled"}
+        out: Dict[str, str] = {
+            "openai": "disabled",
+            "hermes_harness": "disabled",
+            "anthropic": "disabled",
+        }
         for name, client in self._providers.items():
             out[name] = await client.health()
         return out

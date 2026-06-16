@@ -19,7 +19,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # ---------------------------------------------------------------------------
 
 
-ProviderName = Literal["openai", "hermes_harness"]
+ProviderName = Literal["openai", "hermes_harness", "anthropic"]
 
 
 class Settings(BaseSettings):
@@ -48,6 +48,20 @@ class Settings(BaseSettings):
     hermes_harness_base_url: str = Field(default="", alias="HERMES_HARNESS_BASE_URL")
     hermes_harness_default_model: str = Field(
         default="", alias="HERMES_HARNESS_DEFAULT_MODEL"
+    )
+
+    # --- Anthropic (Claude API, native /v1/messages — not OpenAI-compat) ---
+    # Optional; provider is registered only when ANTHROPIC_API_KEY is set.
+    # Default model defers to api/llm.py's claude-api skill guidance.
+    anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
+    anthropic_base_url: str = Field(
+        default="https://api.anthropic.com/v1", alias="ANTHROPIC_BASE_URL"
+    )
+    anthropic_default_model: str = Field(
+        default="claude-opus-4-8", alias="ANTHROPIC_DEFAULT_MODEL"
+    )
+    anthropic_default_max_tokens: int = Field(
+        default=4096, alias="ANTHROPIC_DEFAULT_MAX_TOKENS"
     )
 
     # --- Southbrook tenant bridge ---
@@ -94,6 +108,7 @@ class Settings(BaseSettings):
     # the affected provider pills.
     llm_disabled_openai: bool = Field(default=False, exclude=True)
     llm_disabled_hermes_harness: bool = Field(default=False, exclude=True)
+    llm_disabled_anthropic: bool = Field(default=False, exclude=True)
     llm_disabled_reason: str = Field(default="", exclude=True)
 
     @model_validator(mode="after")
@@ -116,6 +131,12 @@ class Settings(BaseSettings):
                     "both required when primary provider is hermes_harness. "
                     "Chat is disabled until both are set."
                 )
+        if self.hermes_primary_provider == "anthropic" and not self.anthropic_api_key:
+            self.llm_disabled_anthropic = True
+            self.llm_disabled_reason = (
+                "ANTHROPIC_API_KEY is blank. Chat is disabled until the key "
+                "is set in .env and the api container is restarted."
+            )
         # Harness key supplied without a base URL is still a misconfiguration
         # — but treat as degraded rather than fatal.
         if self.hermes_harness_api_key and not self.hermes_harness_base_url:
@@ -321,6 +342,7 @@ class LLMHealth(BaseModel):
     # than red and shows a wait-time hint instead of an alarming banner.
     openai: Literal["ok", "unavailable", "disabled", "rate_limited"]
     hermes_harness: Literal["ok", "unavailable", "disabled", "rate_limited"]
+    anthropic: Literal["ok", "unavailable", "disabled", "rate_limited"] = "disabled"
 
 
 class BridgesHealth(BaseModel):
