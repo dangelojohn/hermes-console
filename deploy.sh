@@ -136,50 +136,107 @@ fi
 log "  compose stack reconciled"
 
 # ---------------------------------------------------------------------------
-# Step (e) — append Caddy snippet (idempotent)
+# Step (e) — install Caddy snippet (idempotent, dedup-safe)
 # ---------------------------------------------------------------------------
-log "Step (e): ensuring Caddy snippet is installed"
-# shellcheck disable=SC2029
-if ssh_qnap "grep -F '${SNIPPET_MARKER}' '${CADDYFILE}' >/dev/null 2>&1"; then
-    log "  snippet already present in ${CADDYFILE} (no change)"
-else
-    log "  appending ${SNIPPET_PATH} → ${CADDYFILE}"
-    ssh_qnap "cp '${CADDYFILE}' '${CADDYFILE}.bak.$(date +%Y%m%d%H%M%S)' && \
-              printf '\n\n# --- hermes-console (auto-appended by deploy.sh) ---\n' >> '${CADDYFILE}' && \
-              cat '${SNIPPET_PATH}' >> '${CADDYFILE}'"
+# We had a real bug during the live deploy where retries produced multiple
+# BEGIN/END marker pairs in the Caddyfile, each with a slightly different
+# snippet body. The cleanest, most idempotent fix: always strip every
+# hermes-console section first, then append exactly one fresh copy. This
+# survives partial deploys, manual edits, and rapid retries.
+# ---------------------------------------------------------------------------
+log "Step (e): installing Caddy snippet (dedup-safe)"
+ssh_qnap "cp '${CADDYFILE}' '${CADDYFILE}.bak.$(date +%Y%m%d%H%M%S)'"
+ssh_qnap "awk '
+    /=== BEGIN hermes-console snippet/ { skip=1; next }
+    /=== END hermes-console snippet/    { skip=0; next }
+    !skip { print }
+' '${CADDYFILE}' > '${CADDYFILE}.tmp' && mv '${CADDYFILE}.tmp' '${CADDYFILE}'"
+ssh_qnap "{ \
+    printf '\n\n# === BEGIN hermes-console snippet (auto-appended by deploy.sh) ===\n'; \
+    cat '${SNIPPET_PATH}'; \
+    printf '\n# === END hermes-console snippet ===\n'; \
+} >> '${CADDYFILE}'"
+log "  marker pairs in Caddyfile after install: \
+$(ssh_qnap "grep -c 'BEGIN hermes-console' '${CADDYFILE}'")"
+
+# ---------------------------------------------------------------------------
+# Step (f) — connect alfacore-caddy to hermes-net (idempotent)
+# ---------------------------------------------------------------------------
+# Caddy lives on alfacore-net; the hermes services live on hermes-net.
+# For reverse_proxy to resolve container names, caddy needs to be on both.
+# `docker network connect` returns an error if already connected — fine.
+log "Step (f): ensuring alfacore-caddy is on hermes-net"
+ssh_qnap "DOCKER_HOST=${DOCKER_HOST_URL} ${DOCKER_BIN} network connect hermes-net alfacore-caddy 2>&1 || true" >/dev/null
+log "  network ok"
+
+# ---------------------------------------------------------------------------
+# Step (g) — caddy: FULL RESTART, not reload
+# ---------------------------------------------------------------------------
+# `caddy reload` keeps the autosaved JSON config and only diffs the new one
+# in. After we change reverse_proxy transport settings, the autosave can
+# survive across reloads and silently keep the OLD upstream behavior. A
+# full container restart forces caddy to re-adapt from the Caddyfile clean.
+# This was hit live: 502s persisted through 4 reloads, fixed by 1 restart.
+# ---------------------------------------------------------------------------
+log "Step (g): restarting alfacore-caddy (full restart, not reload)"
+remote_docker "restart alfacore-caddy" >/dev/null
+sleep 6
+log "  caddy restarted"
+
+# ---------------------------------------------------------------------------
+# Step (h) — internal smoke: hit UI + API from inside Caddy
+# ---------------------------------------------------------------------------
+# Public URL is gated by Cloudflare Access — we can't curl past that from
+# this Mac in CI mode. So we test the two upstreams from inside the Caddy
+# container, which exercises the same reverse_proxy routes the public
+# request would. If these pass, the only thing left is the tunnel route.
+# ---------------------------------------------------------------------------
+log "Step (h): internal smoke from inside alfacore-caddy"
+ui_code="$(ssh_qnap "DOCKER_HOST=${DOCKER_HOST_URL} ${DOCKER_BIN} exec alfacore-caddy \
+    sh -c 'wget -qO /dev/null --server-response --header=\"Host: hermes.odooiq.com\" http://localhost/ 2>&1 | grep -m1 HTTP | awk \"{print \\\$2}\"' \
+    " || true)"
+api_code="$(ssh_qnap "DOCKER_HOST=${DOCKER_HOST_URL} ${DOCKER_BIN} exec alfacore-caddy \
+    sh -c 'wget -qO /dev/null --server-response --header=\"Host: hermes.odooiq.com\" http://localhost/api/health 2>&1 | grep -m1 HTTP | awk \"{print \\\$2}\"' \
+    " || true)"
+log "  internal UI  -> HTTP ${ui_code:-?}"
+log "  internal API -> HTTP ${api_code:-?}"
+if [[ "${ui_code}" != "200" || "${api_code}" != "200" ]]; then
+    warn "  one of the upstreams isn't responding 200. Check:"
+    warn "    docker logs hermes-api"
+    warn "    docker logs hermes-ui"
+    warn "    docker logs alfacore-caddy | tail -30"
 fi
 
 # ---------------------------------------------------------------------------
-# Step (f) — caddy reload
+# Step (i) — public smoke (will fail with 502/530 if Cloudflare route missing)
 # ---------------------------------------------------------------------------
-log "Step (f): reloading alfacore-caddy"
-remote_docker "exec alfacore-caddy caddy reload --config /etc/caddy/Caddyfile"
-log "  caddy reload OK"
-
-# ---------------------------------------------------------------------------
-# Step (g) — smoke test
-# ---------------------------------------------------------------------------
-log "Step (g): smoke-testing ${PUBLIC_URL}/api/health"
-sleep 3  # give containers + caddy a moment to settle
-code="$(curl -sk -o /dev/null -w '%{http_code}\n' "${PUBLIC_URL}/api/health" || true)"
+log "Step (i): public smoke at ${PUBLIC_URL}/api/health"
+sleep 2
+code="$(curl -sk -o /dev/null -w '%{http_code}\n' --max-time 8 "${PUBLIC_URL}/api/health" || true)"
 case "${code}" in
     200)
-        log "  HTTP 200 — Hermes Console is up."
+        log "  HTTP 200 — Hermes Console is publicly reachable."
+        ;;
+    302)
+        log "  HTTP 302 — Cloudflare Access redirect (expected when OTP gate is on)."
+        log "  Open ${PUBLIC_URL}/ in a browser to complete the OTP."
         ;;
     502|503|530|0|"")
         warn "  HTTP ${code} — looks like the Cloudflare tunnel route is missing."
         cat <<EOF
 
 ----------------------------------------------------------------------
-Next step: add the Cloudflare tunnel route. Open Chrome and run the
-prompt at docs/TUNNEL_ROUTE_REQUEST.md, or do it manually:
+Internal smoke (UI=${ui_code}, API=${api_code}) means the stack on the
+QNAP is healthy. Last step: add the Cloudflare tunnel route. See
+docs/TUNNEL_ROUTE_REQUEST.md — paste the prompt to Chrome Claude, or do
+it manually:
 
   Tunnel:      qnap-odooiq
   Hostname:    hermes.odooiq.com
   Service:     http://localhost:9080
   Access app:  email = dangelo.john@gmail.com (OTP)
 
-After adding the route, re-run:
+After the route is added, re-run:
   ./deploy.sh --smoke-only
 ----------------------------------------------------------------------
 EOF
