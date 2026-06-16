@@ -1,0 +1,113 @@
+# Hermes Console — QNAP compose stack
+#
+# Two services fronted by alfacore-caddy (which lives on alfacore-net) and
+# reaching the Southbrook tenant containers (postgres + odoo) over southbrook-net.
+#
+# This file is meant to be invoked on the QNAP via system-docker, e.g.:
+#
+#   DOCKER_HOST=unix:///var/run/system-docker.sock \
+#     /share/CACHEDEV3_DATA/.qpkg/container-station/bin/docker compose \
+#     -f /share/CACHEDEV3_DATA/Container/hermes-console/docker-compose.yml up -d --build
+#
+# Neither service exposes host ports — all ingress goes through alfacore-caddy
+# (see Caddyfile.snippet) which talks to them over the shared docker networks.
+
+name: hermes-console
+
+services:
+
+  # -------------------------------------------------------------------------
+  # FastAPI service (read from Postgres, write to Odoo, queue to SQLite)
+  # -------------------------------------------------------------------------
+  hermes-api:
+    container_name: hermes-api
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    image: hermes-console/api:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - hermes-data:/data
+    networks:
+      hermes-net:
+        aliases:
+          - hermes-api
+      southbrook-net:
+        aliases:
+          - hermes-api
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # -------------------------------------------------------------------------
+  # Vue 3 PWA served by nginx — talks to hermes-api over hermes-net
+  # -------------------------------------------------------------------------
+  hermes-ui:
+    container_name: hermes-ui
+    build:
+      context: ./ui
+      dockerfile: Dockerfile
+    image: hermes-console/ui:latest
+    restart: unless-stopped
+    depends_on:
+      - hermes-api
+    networks:
+      hermes-net:
+        aliases:
+          - hermes-ui
+      alfacore-net:
+        aliases:
+          - hermes-ui
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:80/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+# ---------------------------------------------------------------------------
+# Networks
+#   - hermes-net      : private east-west between api and ui
+#   - southbrook-net  : pre-existing; hosts southbrook-postgres + southbrook-odoo
+#   - alfacore-net    : pre-existing; hosts alfacore-caddy (the public entry)
+# ---------------------------------------------------------------------------
+networks:
+  hermes-net:
+    name: hermes-net
+    driver: bridge
+    internal: true
+  southbrook-net:
+    name: southbrook-net
+    external: true
+  alfacore-net:
+    name: alfacore-net
+    external: true
+
+# ---------------------------------------------------------------------------
+# Volumes
+#   hermes-data : bound to ./data on the host so the SQLite queue survives
+#                 container rebuilds and stack restarts.
+# ---------------------------------------------------------------------------
+volumes:
+  hermes-data:
+    name: hermes-data
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /share/CACHEDEV3_DATA/Container/hermes-console/data

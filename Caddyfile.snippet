@@ -1,0 +1,73 @@
+# =============================================================================
+# Hermes Console — alfacore-caddy snippet
+# =============================================================================
+#
+# Append this section to the QNAP Caddyfile at:
+#   /share/CACHEDEV3_DATA/Container/odoo/config/Caddyfile
+#
+# Placement rules:
+#   - PASTE this block ABOVE the catch-all `:9080` / `:9443` server blocks at
+#     the bottom of the file.
+#   - PASTE it AFTER the last per-site `(*_routes)` snippet definition (the
+#     existing southbrook / alfacore / porterly / etc. route snippets) so the
+#     ordering stays consistent with the rest of the file.
+#
+# After pasting, run:
+#   docker exec alfacore-caddy caddy reload --config /etc/caddy/Caddyfile
+#
+# This snippet is additive — it does not touch any existing site block, and
+# it relies on Caddy's automatic HTTPS to fetch a cert for hermes.odooiq.com
+# the first time the public hostname is hit through the Cloudflare tunnel.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Reusable routes snippet
+# -----------------------------------------------------------------------------
+(hermes_routes) {
+    # API + healthcheck → FastAPI on hermes-net
+    @hermes_api {
+        path /api/* /health /health/*
+    }
+    handle @hermes_api {
+        # Plain HTTP between containers — no transport block needed.
+        # Caddy's default reverse_proxy uses HTTP for `host:port` upstreams.
+        reverse_proxy hermes-api:8000 {
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    # Everything else → Vue PWA on alfacore-net
+    handle {
+        reverse_proxy hermes-ui:80 {
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    encode zstd gzip
+
+    log {
+        output stdout
+        format json
+        level  INFO
+    }
+}
+
+# -----------------------------------------------------------------------------
+# Public hostname binding
+# -----------------------------------------------------------------------------
+# Cloudflare tunnel terminates TLS at the edge and forwards plain HTTP to the
+# caddy container on :9080. We still want Caddy to serve HTTPS on :9443 for
+# direct-LAN access, so define both.
+# -----------------------------------------------------------------------------
+
+hermes.odooiq.com:80 {
+    import hermes_routes
+}
+
+# HTTPS binding is INTENTIONALLY omitted. The public path is:
+#     Browser → Cloudflare TLS → cloudflared tunnel → http://localhost:9080 → caddy:80
+# Cloudflare terminates TLS at the edge, so Caddy only needs to serve plain HTTP
+# on its container :80 (mapped to host :9080). For direct-LAN HTTPS, generate a
+# self-signed cert at /data/caddy/certs/hermes.{crt,key} inside the caddy-data
+# volume and add a `hermes.odooiq.com:443 { tls ...; import hermes_routes }`
+# block matching the per-site pattern used for sapienzium / porterly / etc.

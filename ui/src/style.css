@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply min-h-screen antialiased;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-brand;
+  }
+}
+
+@layer components {
+  .pill {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium;
+  }
+  .pill-ok    { @apply pill bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200; }
+  .pill-warn  { @apply pill bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200; }
+  .pill-err   { @apply pill bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200; }
+  .pill-info  { @apply pill bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200; }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium
+           transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-primary   { @apply btn bg-brand text-white hover:bg-brand-dark; }
+  .btn-approve   { @apply btn bg-emerald-600 text-white hover:bg-emerald-700; }
+  .btn-reject    { @apply btn bg-red-600 text-white hover:bg-red-700; }
+  .btn-apply     { @apply btn bg-blue-600 text-white hover:bg-blue-700; }
+  .btn-ghost     { @apply btn bg-transparent hover:bg-slate-200 dark:hover:bg-slate-800; }
+
+  .card {
+    @apply rounded-lg border border-slate-200 dark:border-slate-800
+           bg-white dark:bg-slate-900 shadow-sm;
+  }
+
+  .priority-blocker { @apply bg-priority-blocker text-white; }
+  .priority-high    { @apply bg-priority-high text-white; }
+  .priority-normal  { @apply bg-priority-normal text-white; }
+  .priority-low     { @apply bg-priority-low text-white; }
+}
+
+@layer utilities {
+  .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { @apply bg-slate-300 dark:bg-slate-700 rounded; }
+}

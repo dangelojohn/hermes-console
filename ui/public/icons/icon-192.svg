@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#7c3aed" />
+      <stop offset="100%" stop-color="#5b21b6" />
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="32" fill="url(#g)" />
+  <!-- stylized Hermes wing glyph + H -->
+  <path d="M28 110 Q60 70 96 96 Q132 70 164 110" stroke="#ffffff" stroke-width="6" fill="none" stroke-linecap="round" opacity="0.85" />
+  <text x="96" y="132" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-weight="800" font-size="88" fill="#ffffff">H</text>
+</svg>

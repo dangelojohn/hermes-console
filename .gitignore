@@ -1,0 +1,18 @@
+# Secrets — NEVER commit
+.env
+.env.local
+.env.*.local
+__pycache__/
+*.pyc
+*.pyo
+node_modules/
+ui/dist/
+data/
+*.sqlite
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
+/tmp/
+.vscode/
+.idea/
+.DS_Store
