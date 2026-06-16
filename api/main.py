@@ -32,7 +32,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .agent_loops import AgentEnv, AgentLoopRunner, build_enabled_loops, execute_loop
 from .auth import Principal, require_auth
-from .llm import LLMError, ProviderRegistry
+from .llm import LLMError, LLMRateLimited, ProviderRegistry
 from .local_store import LocalStore, LocalStoreUnavailable
 from .models import (
     ActionResult,
@@ -512,6 +512,15 @@ def _register_routes(app: FastAPI) -> None:
 
         try:
             resp = await client.chat(messages, model=model or None)
+        except LLMRateLimited as exc:
+            # Surface 429 to the client so the UI can show a clean
+            # "rate-limited — wait a minute" message instead of a
+            # generic 502 gateway error. Important for free-tier
+            # providers like Gemini (20 req/min on 2.5-flash).
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"llm rate limited: {exc}",
+            ) from exc
         except LLMError as exc:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,

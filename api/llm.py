@@ -54,6 +54,17 @@ class LLMRejected(LLMError):
     """Provider rejected the request (4xx, malformed body)."""
 
 
+class LLMRateLimited(LLMRejected):
+    """Provider returned HTTP 429 — quota exhausted or rate-limit hit.
+
+    Carved out from LLMRejected so the API layer can return 429 to the
+    client (not 502) and the agent runner can back off instead of
+    burning through the same quota window. Common with free-tier
+    providers like Google Gemini (20 requests/minute on
+    gemini-2.5-flash, 1500/day on gemini-1.5-flash) and Groq.
+    """
+
+
 class ProviderNotConfigured(LLMError):
     """Caller asked for a provider that wasn't initialised at startup."""
 
@@ -169,6 +180,13 @@ class LLMClient:
         if resp.status_code == 401:
             # Don't include the key — surface that auth failed only.
             raise LLMRejected(f"{self._provider_name}: auth rejected (401)")
+        if resp.status_code == 429:
+            # Rate-limited — carved out from the general 4xx bucket so
+            # the API can return 429 to the client rather than 502.
+            detail = resp.text[:400]
+            raise LLMRateLimited(
+                f"{self._provider_name}: 429 (rate limited / quota exhausted) {detail}"
+            )
         if resp.status_code >= 400:
             # Truncate body to keep error sane.
             detail = resp.text[:400]

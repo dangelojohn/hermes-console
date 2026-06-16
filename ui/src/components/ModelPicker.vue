@@ -48,7 +48,10 @@ const currentKey = computed(() => {
 
 function onChange(ev) {
   const v = ev.target.value;
-  if (!v) { emit('update:modelValue', { provider: '', model: '' }); return; }
+  // "Default" → emit null/null so the API falls back to thread default
+  // and ultimately to settings.hermes_primary_provider. Sending empty
+  // strings would 422 against Pydantic's Literal["openai", "hermes_harness"].
+  if (!v) { emit('update:modelValue', { provider: null, model: null }); return; }
   const [provider, model] = v.split('::');
   emit('update:modelValue', { provider, model });
 }

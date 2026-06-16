@@ -263,16 +263,35 @@ class RecommendationActionIn(BaseModel):
     tenant: Optional[str] = None  # only used by /apply
 
 
+def _empty_to_none(v):
+    """Treat empty-string provider/model as 'use the default'.
+
+    The UI's ModelPicker historically emitted `provider: ""` for the
+    'Default' option, which Pydantic's Literal validator rejected with
+    422. This validator collapses empty strings to None so the endpoint
+    can fall back to thread.provider / settings.hermes_primary_provider.
+    """
+    if isinstance(v, str) and v == "":
+        return None
+    return v
+
+
 class ChatThreadCreate(BaseModel):
     title: Optional[str] = None
     provider: Optional[ProviderName] = None
     model: Optional[str] = None
+
+    _normalize_provider = field_validator("provider", mode="before")(_empty_to_none)
+    _normalize_model = field_validator("model", mode="before")(_empty_to_none)
 
 
 class ChatMessageIn(BaseModel):
     content: str
     provider: Optional[ProviderName] = None
     model: Optional[str] = None
+
+    _normalize_provider = field_validator("provider", mode="before")(_empty_to_none)
+    _normalize_model = field_validator("model", mode="before")(_empty_to_none)
 
 
 class QueueRecommendationFromMessageIn(BaseModel):

@@ -20,7 +20,10 @@ const bannerMessage = computed(() => {
   }
   if (store.writesBlocked) return 'SQLite down — writes blocked.';
   const llm = store.health.llm || {};
-  const dead = Object.entries(llm).filter(([, v]) => v && v !== 'ok' && v !== 'unknown').map(([k]) => k);
+  // Only treat 'unavailable' as a warning. 'disabled' = intentionally
+  // not configured (no key/url in .env), which is a normal state — not
+  // worth flagging. 'unknown' / undefined also stays silent.
+  const dead = Object.entries(llm).filter(([, v]) => v === 'unavailable').map(([k]) => k);
   if (dead.length) return `LLM provider(s) unavailable: ${dead.join(', ')}.`;
   return 'All systems operational.';
 });
