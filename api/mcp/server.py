@@ -179,6 +179,42 @@ async def run_stdio(db_path: str, key: str) -> int:
         _set_res_ctx(store=store, skills_root=skills_root)
         _set_prompts_ctx(skills_root=skills_root)
 
+        # ---- Phase 2: write tools (file recommendation, trigger loop, apply) ----
+        try:
+            from api.mcp.tools.write import (
+                register as _reg_write, set_write_context as _set_write_ctx,
+            )
+            _reg_write()
+            # agent_runner is set up by the FastAPI app on hermes-api startup
+            # and is NOT present in this short-lived stdio subprocess. For
+            # trigger_agent_loop we synthesise a lightweight runner that
+            # delegates to api.agent_loops.execute_loop directly with the
+            # store + provider registry + bridges we already built.
+            class _MCPAgentRunner:
+                def __init__(self, store, providers, settings, bridges, logger):
+                    self._store = store; self._providers = providers
+                    self._settings = settings; self._bridges = bridges
+                    self._logger = logger
+                async def run_once(self, name):
+                    from api.agent_loops import (
+                        AgentEnv, execute_loop, _BUILT_IN_LOOPS,
+                    )
+                    if name not in _BUILT_IN_LOOPS:
+                        raise KeyError(name)
+                    loop = _BUILT_IN_LOOPS[name](self._settings)
+                    env = AgentEnv(
+                        llm=self._providers, store=self._store,
+                        settings=self._settings, logger=self._logger,
+                    )
+                    return await execute_loop(loop, env)
+            try:
+                runner = _MCPAgentRunner(store, registry, settings, bridges, logger)  # type: ignore[name-defined]
+            except NameError:
+                runner = None  # provider registry or bridges init was skipped
+            _set_write_ctx(store=store, agent_runner=runner, bridges=bridges if "bridges" in dir() else {})
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("mcp: write tools init skipped (%s)", exc)
+
         # ---- Phase 3 Option C: Hermes-as-MCP-client of upstream servers ----
         # Each upstream MCP server's tools are re-exported under a namespace
         # prefix. Built-in upstream catalog: cloudflare-docs (public, no auth).
