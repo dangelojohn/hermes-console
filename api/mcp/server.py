@@ -179,6 +179,39 @@ async def run_stdio(db_path: str, key: str) -> int:
         _set_res_ctx(store=store, skills_root=skills_root)
         _set_prompts_ctx(skills_root=skills_root)
 
+        # ---- Phase 3 Option C: Hermes-as-MCP-client of upstream servers ----
+        # Each upstream MCP server's tools are re-exported under a namespace
+        # prefix. Built-in upstream catalog: cloudflare-docs (public, no auth).
+        # More can be added via the HERMES_UPSTREAM_MCP_SERVERS env var
+        # (comma-separated "name=url:prefix" tuples; future enhancement).
+        try:
+            from api.mcp.clients.upstream_mcp import (
+                UpstreamConfig as _UpstreamConfig,
+                register_upstream_as_tools as _register_upstream,
+            )
+            from api.mcp.tools import register_tool as _rt, ToolSpec as _TS
+            registrar = {"register_tool": _rt, "ToolSpec": _TS}
+
+            cf_token = _os.environ.get("CLOUDFLARE_API_TOKEN", "")
+            upstreams_to_try = [
+                _UpstreamConfig(
+                    name="cloudflare-docs",
+                    url="https://docs.mcp.cloudflare.com/mcp",
+                    prefix="cf_docs",
+                    headers=(
+                        {"Authorization": f"Bearer {cf_token}"} if cf_token else None
+                    ),
+                ),
+            ]
+            for cfg in upstreams_to_try:
+                try:
+                    n = await _register_upstream(cfg, tool_registrar=registrar)
+                    logger.info("upstream %s: %d tools registered", cfg.name, n)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("upstream %s skipped: %s", cfg.name, exc)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("mcp: upstream init failed (%s)", exc)
+
         # ---- Cloudflare tools (Phase 2 Option B) ----
         # Only registered when CLOUDFLARE_API_TOKEN is set. Tools degrade
         # gracefully when the client isn't configured.
