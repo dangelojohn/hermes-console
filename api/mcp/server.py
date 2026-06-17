@@ -179,6 +179,31 @@ async def run_stdio(db_path: str, key: str) -> int:
         _set_res_ctx(store=store, skills_root=skills_root)
         _set_prompts_ctx(skills_root=skills_root)
 
+        # ---- Cloudflare tools (Phase 2 Option B) ----
+        # Only registered when CLOUDFLARE_API_TOKEN is set. Tools degrade
+        # gracefully when the client isn't configured.
+        try:
+            from api.mcp.tools.cloudflare import (
+                register as _reg_cf, set_cloudflare_client as _set_cf,
+            )
+            from api.mcp.clients.cloudflare import CloudflareClient
+            _reg_cf()
+            cf_token = _os.environ.get("CLOUDFLARE_API_TOKEN", "")
+            if cf_token:
+                cf_client = CloudflareClient(
+                    api_token=cf_token,
+                    account_id=_os.environ.get("CLOUDFLARE_ACCOUNT_ID") or None,
+                )
+                await cf_client.startup()
+                _set_cf(cf_client)
+                logger.info("mcp: cloudflare client ready")
+            else:
+                _set_cf(None)
+                logger.info("mcp: CLOUDFLARE_API_TOKEN not set — "
+                            "hermes_cloudflare_* tools will return 'not configured'")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("mcp: cloudflare init skipped (%s)", exc)
+
         server = MCPServer(store, client_id=matched["id"], client_name=matched["name"])
         logger.info("mcp stdio ready client=%s", matched["name"])
 

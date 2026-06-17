@@ -115,6 +115,18 @@ class Settings(BaseSettings):
         default="", alias="HOME_ASSISTANT_CONTEXT_ENTITIES"
     )
 
+    # --- Cloudflare API (read-only via hermes_cloudflare_* MCP tools) ---
+    # Generate at https://dash.cloudflare.com/profile/api-tokens with the
+    # least-privilege scopes: Zone:Zone:Read, Zone:DNS:Read,
+    # Account:Cloudflare Tunnel:Read, Account:Access:Apps and Policies:Read.
+    # account_id enables the tunnel + Access tools.
+    cloudflare_api_token: str = Field(
+        default="", alias="CLOUDFLARE_API_TOKEN"
+    )
+    cloudflare_account_id: str = Field(
+        default="", alias="CLOUDFLARE_ACCOUNT_ID"
+    )
+
     # --- API / display ---
     hermes_sqlite_path: str = Field(
         default="/data/hermes.sqlite", alias="HERMES_SQLITE_PATH"
