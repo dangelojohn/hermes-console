@@ -1,0 +1,15 @@
+{
+  "name": "hermes-skill-maintainer",
+  "version": "0.1.0",
+  "category": "meta",
+  "summary": "Rebuild the library index, detect duplicates and stale skills, run format-compliance checks, and report Need/JTBD coverage gaps.",
+  "needs": ["N-16"],
+  "jtbds": ["J-12"],
+  "default_mode": "read-only",
+  "destructive_actions": false,
+  "requires_confirmation": false,
+  "outputs": [
+    "custom-hermes-skills/SKILLS_INDEX.md",
+    "custom-hermes-skills/runs/hermes-skill-maintainer/<ts>.md"
+  ]
+}

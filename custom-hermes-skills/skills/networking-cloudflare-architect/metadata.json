@@ -1,0 +1,45 @@
+{
+  "name": "networking-cloudflare-architect",
+  "category": "networking-cloudflare-web-services",
+  "description": "Deep networking and Cloudflare operations skill for Odoo, QNAP, Forgejo, Python services, JavaScript/OWL frontend delivery, DNS, TLS, tunnels, WAF, cache, and web-service troubleshooting.",
+  "domains": [
+    "networking",
+    "dns",
+    "tls",
+    "http",
+    "cloudflare",
+    "cloudflare-zero-trust",
+    "cloudflare-tunnel",
+    "odoo",
+    "qnap",
+    "forgejo",
+    "python",
+    "javascript",
+    "owl",
+    "web-services"
+  ],
+  "default_mode": "read-only",
+  "requires_confirmation_for": [
+    "dns_changes",
+    "cloudflare_proxy_changes",
+    "ssl_tls_mode_changes",
+    "waf_changes",
+    "zero_trust_changes",
+    "tunnel_changes",
+    "cache_rule_changes",
+    "redirect_changes",
+    "rate_limit_changes",
+    "origin_exposure_changes",
+    "firewall_changes",
+    "production_deployment_changes"
+  ],
+  "version": "0.1.0",
+  "summary": "Deep networking and Cloudflare operations skill for the user's Odoo/QNAP/Forgejo/Hermes/web-service stack.",
+  "needs": ["N-09", "N-12", "N-15", "N-16"],
+  "jtbds": ["J-05", "J-06", "J-09", "J-10"],
+  "destructive_actions": true,
+  "requires_confirmation": true,
+  "outputs": [
+    "custom-hermes-skills/runs/networking-cloudflare-architect/<target>-<ts>.md"
+  ]
+}

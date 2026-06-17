@@ -1,0 +1,14 @@
+{
+  "name": "qnap-web-services-ops",
+  "version": "0.1.0",
+  "category": "qnap",
+  "summary": "Caddy + Cloudflare-tunnel hostname management: audit, snippet generation, route-prompt generation.",
+  "needs": ["N-09", "N-16"],
+  "jtbds": ["J-06"],
+  "default_mode": "read-only",
+  "destructive_actions": false,
+  "requires_confirmation": false,
+  "outputs": [
+    "custom-hermes-skills/runs/qnap-web-services-ops/<hostname>-<ts>.md"
+  ]
+}

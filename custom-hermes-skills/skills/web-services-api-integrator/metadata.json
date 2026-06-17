@@ -1,0 +1,14 @@
+{
+  "name": "web-services-api-integrator",
+  "version": "0.1.0",
+  "category": "web-services",
+  "summary": "Inspect an HTTP endpoint to produce its contract, or scaffold a new tenant bridge / LLM provider / webhook following the Hermes Console reference implementations.",
+  "needs": ["N-05", "N-12", "N-13", "N-15"],
+  "jtbds": ["J-09", "J-10"],
+  "default_mode": "read-only",
+  "destructive_actions": false,
+  "requires_confirmation": false,
+  "outputs": [
+    "custom-hermes-skills/runs/web-services-api-integrator/<mode>-<name>-<ts>.md"
+  ]
+}

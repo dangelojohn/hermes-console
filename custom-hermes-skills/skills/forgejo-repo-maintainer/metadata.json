@@ -1,0 +1,14 @@
+{
+  "name": "forgejo-repo-maintainer",
+  "version": "0.1.0",
+  "category": "forgejo",
+  "summary": "Per-operation Forgejo admin: list/create repos, rotate tokens, audit users — all with ephemeral CLI-generated tokens that are revoked at the end of the operation.",
+  "needs": ["N-10", "N-16"],
+  "jtbds": ["J-07"],
+  "default_mode": "read-only",
+  "destructive_actions": true,
+  "requires_confirmation": true,
+  "outputs": [
+    "custom-hermes-skills/runs/forgejo-repo-maintainer/<mode>-<ts>.md"
+  ]
+}

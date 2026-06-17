@@ -1,0 +1,14 @@
+{
+  "name": "network-change-reviewer",
+  "version": "0.1.0",
+  "category": "networking-cloudflare-web-services",
+  "summary": "Pre-change safety review for every Cloudflare / Omada / Wi-Fi / VLAN / DHCP / firewall / DNS / QNAP / Odoo / Forgejo change. Emits a 19-section Change Plan with risk classification and rollback gate.",
+  "needs": ["N-09", "N-16"],
+  "jtbds": ["J-05", "J-06"],
+  "default_mode": "read-only",
+  "destructive_actions": false,
+  "requires_confirmation": false,
+  "outputs": [
+    "custom-hermes-skills/runs/network-change-reviewer/<ts>-<change-title>.md"
+  ]
+}

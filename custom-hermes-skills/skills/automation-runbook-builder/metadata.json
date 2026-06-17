@@ -1,0 +1,15 @@
+{
+  "name": "automation-runbook-builder",
+  "version": "0.1.0",
+  "category": "meta",
+  "summary": "Convert a real-execution chat-transcript procedure into a versioned, dry-runnable runbook with rollback and validation.",
+  "needs": ["N-18"],
+  "jtbds": ["J-11"],
+  "default_mode": "read-only",
+  "destructive_actions": true,
+  "requires_confirmation": true,
+  "outputs": [
+    "<target_path>",
+    "<target_path>.meta.json"
+  ]
+}

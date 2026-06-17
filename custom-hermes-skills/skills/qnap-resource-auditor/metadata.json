@@ -1,0 +1,15 @@
+{
+  "name": "qnap-resource-auditor",
+  "version": "0.1.0",
+  "category": "qnap",
+  "summary": "Read-only QNAP container topology audit with optional drift detection against the documented map.",
+  "needs": ["N-07", "N-16"],
+  "jtbds": ["J-05"],
+  "default_mode": "read-only",
+  "destructive_actions": false,
+  "requires_confirmation": false,
+  "outputs": [
+    "custom-hermes-skills/runs/qnap-resource-auditor/<ts>.md",
+    "custom-hermes-skills/runs/qnap-resource-auditor/<ts>.json"
+  ]
+}

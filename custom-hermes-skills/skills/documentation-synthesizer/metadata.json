@@ -1,0 +1,14 @@
+{
+  "name": "documentation-synthesizer",
+  "version": "0.1.0",
+  "category": "documentation",
+  "summary": "Extract current-state / open-items / runbook content from sprawling source documents, with mandatory line-level citations.",
+  "needs": ["N-14", "N-18"],
+  "jtbds": ["J-11"],
+  "default_mode": "read-only",
+  "destructive_actions": false,
+  "requires_confirmation": false,
+  "outputs": [
+    "<output_path>"
+  ]
+}

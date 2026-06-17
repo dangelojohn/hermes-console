@@ -1,0 +1,14 @@
+{
+  "name": "skill-integrity-auditor",
+  "version": "0.1.0",
+  "category": "meta",
+  "summary": "Static analysis of an agent-skills library for safety gates, secrets, prompt-injection bait, destructive commands, and license-attribution gaps.",
+  "needs": ["N-16"],
+  "jtbds": ["J-12"],
+  "default_mode": "read-only",
+  "destructive_actions": false,
+  "requires_confirmation": false,
+  "outputs": [
+    "custom-hermes-skills/runs/skill-integrity-auditor/<ts>.md"
+  ]
+}

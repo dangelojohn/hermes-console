@@ -1,0 +1,14 @@
+{
+  "name": "qnap-backup-snapshot-checker",
+  "version": "0.1.0",
+  "category": "qnap",
+  "summary": "Read-only backup-readiness audit: per-site retention conformance, cron status, off-site replication, restore-test recency.",
+  "needs": ["N-08"],
+  "jtbds": ["J-05"],
+  "default_mode": "read-only",
+  "destructive_actions": false,
+  "requires_confirmation": false,
+  "outputs": [
+    "custom-hermes-skills/runs/qnap-backup-snapshot-checker/<ts>.md"
+  ]
+}

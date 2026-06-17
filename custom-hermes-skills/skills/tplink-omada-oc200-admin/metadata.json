@@ -1,0 +1,14 @@
+{
+  "name": "tplink-omada-oc200-admin",
+  "version": "0.1.0",
+  "category": "networking-cloudflare-web-services",
+  "summary": "TP-Link Omada / OC200 controller-side admin: adoption, sites, devices, SSIDs, VLANs, captive portal, firmware, backups, alerts, logs.",
+  "needs": ["N-07", "N-09"],
+  "jtbds": ["J-05", "J-06"],
+  "default_mode": "read-only",
+  "destructive_actions": true,
+  "requires_confirmation": true,
+  "outputs": [
+    "custom-hermes-skills/runs/tplink-omada-oc200-admin/<ts>.md"
+  ]
+}

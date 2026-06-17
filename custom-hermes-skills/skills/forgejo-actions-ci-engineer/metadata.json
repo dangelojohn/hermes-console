@@ -1,0 +1,14 @@
+{
+  "name": "forgejo-actions-ci-engineer",
+  "version": "0.1.0",
+  "category": "forgejo",
+  "summary": "Static analysis of Forgejo Actions workflows for trust-boundary risk, unpinned actions, broad permissions, and runner-escape pathways.",
+  "needs": ["N-11", "N-16"],
+  "jtbds": ["J-08"],
+  "default_mode": "read-only",
+  "destructive_actions": false,
+  "requires_confirmation": false,
+  "outputs": [
+    "custom-hermes-skills/runs/forgejo-actions-ci-engineer/<workflows_dir>-<ts>.md"
+  ]
+}

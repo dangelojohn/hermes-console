@@ -1,0 +1,14 @@
+{
+  "name": "odoo-process-analyst",
+  "version": "0.1.0",
+  "category": "odoo-backend",
+  "summary": "First-line scan of an Odoo workspace producing a process + addon + stakeholder + pain-point map.",
+  "needs": ["N-01", "N-02", "N-14"],
+  "jtbds": ["J-02"],
+  "default_mode": "read-only",
+  "destructive_actions": false,
+  "requires_confirmation": false,
+  "outputs": [
+    "custom-hermes-skills/runs/odoo-process-analyst/<workspace>-<ts>.md"
+  ]
+}
