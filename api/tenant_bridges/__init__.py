@@ -17,11 +17,13 @@ held on ``app.state.bridges``. Disabled bridges are simply not constructed.
 from __future__ import annotations
 
 from .base import BridgeRejected, BridgeUnreachable, TenantBridge
+from .home_assistant import HomeAssistantBridge
 from .southbrook_hermes import SouthbrookHermesBridge
 
 __all__ = [
     "BridgeRejected",
     "BridgeUnreachable",
+    "HomeAssistantBridge",
     "SouthbrookHermesBridge",
     "TenantBridge",
 ]

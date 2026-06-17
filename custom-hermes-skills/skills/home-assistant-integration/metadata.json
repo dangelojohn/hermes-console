@@ -1,0 +1,15 @@
+{
+  "name": "home-assistant-integration",
+  "version": "0.1.0",
+  "category": "web-services",
+  "summary": "Operate and audit the Home Assistant tenant bridge: enable, audit, rotate the long-lived token safely, troubleshoot.",
+  "needs": ["N-05", "N-13"],
+  "jtbds": ["J-10"],
+  "default_mode": "read-only",
+  "destructive_actions": true,
+  "requires_confirmation": true,
+  "learning_enabled": true,
+  "outputs": [
+    "custom-hermes-skills/runs/home-assistant-integration/<mode>-<ts>.md"
+  ]
+}

@@ -3,12 +3,18 @@
   "version": "0.1.0",
   "category": "meta",
   "summary": "Cross-reference JTBDs against built skills; produce coverage matrix or ranked recommendation for the next skill to build.",
-  "needs": ["N-18"],
-  "jtbds": ["J-11", "J-12"],
+  "needs": [
+    "N-18"
+  ],
+  "jtbds": [
+    "J-11",
+    "J-12"
+  ],
   "default_mode": "read-only",
   "destructive_actions": false,
   "requires_confirmation": false,
   "outputs": [
     "custom-hermes-skills/runs/jtbd-skill-mapper/<ts>.md"
-  ]
+  ],
+  "learning_enabled": true
 }

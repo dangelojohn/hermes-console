@@ -97,6 +97,24 @@ class Settings(BaseSettings):
         default="", alias="SOUTHBROOK_HERMES_API_KEY"
     )
 
+    # --- Home Assistant tenant bridge ---
+    # When enabled, approved recommendations get pushed to a Home Assistant
+    # instance as persistent notifications (default) or via a custom HA
+    # service. Optionally read a small allowlist of HA entity states for
+    # agent-loop context. Long-lived access token only; never echoed.
+    home_assistant_enabled: bool = Field(
+        default=False, alias="HOME_ASSISTANT_ENABLED"
+    )
+    home_assistant_url: str = Field(default="", alias="HOME_ASSISTANT_URL")
+    home_assistant_token: str = Field(default="", alias="HOME_ASSISTANT_TOKEN")
+    home_assistant_push_service: str = Field(
+        default="", alias="HOME_ASSISTANT_PUSH_SERVICE"
+    )
+    # Comma-separated; e.g. "sensor.office_temperature,binary_sensor.front_door"
+    home_assistant_context_entities: str = Field(
+        default="", alias="HOME_ASSISTANT_CONTEXT_ENTITIES"
+    )
+
     # --- API / display ---
     hermes_sqlite_path: str = Field(
         default="/data/hermes.sqlite", alias="HERMES_SQLITE_PATH"
@@ -179,6 +197,20 @@ class Settings(BaseSettings):
             if missing:
                 raise ValueError(
                     f"Southbrook bridge enabled but missing: {', '.join(missing)}"
+                )
+        # Home Assistant bridge: when enabled, url + token are mandatory.
+        if self.home_assistant_enabled:
+            missing_ha = [
+                name
+                for name, val in (
+                    ("HOME_ASSISTANT_URL", self.home_assistant_url),
+                    ("HOME_ASSISTANT_TOKEN", self.home_assistant_token),
+                )
+                if not val
+            ]
+            if missing_ha:
+                raise ValueError(
+                    f"Home Assistant bridge enabled but missing: {', '.join(missing_ha)}"
                 )
         return self
 
@@ -366,6 +398,7 @@ class LLMHealth(BaseModel):
 
 class BridgesHealth(BaseModel):
     southbrook_hermes: Literal["ok", "disabled", "unreachable"]
+    home_assistant: Literal["ok", "disabled", "unreachable"] = "disabled"
 
 
 class WhatsAppHealth(BaseModel):

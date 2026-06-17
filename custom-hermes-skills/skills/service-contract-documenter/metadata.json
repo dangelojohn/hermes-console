@@ -3,12 +3,18 @@
   "version": "0.1.0",
   "category": "web-services",
   "summary": "Generate API / service contract documentation in markdown / OpenAPI / runbook format with placeholder-only examples.",
-  "needs": ["N-05", "N-13"],
-  "jtbds": ["J-10"],
+  "needs": [
+    "N-05",
+    "N-13"
+  ],
+  "jtbds": [
+    "J-10"
+  ],
   "default_mode": "read-only",
   "destructive_actions": false,
   "requires_confirmation": false,
   "outputs": [
     "custom-hermes-skills/runs/service-contract-documenter/<service>-<format>-<ts>.md"
-  ]
+  ],
+  "learning_enabled": true
 }

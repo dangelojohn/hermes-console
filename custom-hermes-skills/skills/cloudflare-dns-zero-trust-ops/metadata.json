@@ -3,12 +3,18 @@
   "version": "0.1.0",
   "category": "networking-cloudflare-web-services",
   "summary": "Cloudflare-only deep ops: DNS, proxy state, SSL/TLS, rulesets, WAF, Access apps, Zero Trust, Tunnel connectors, service tokens, origin certs.",
-  "needs": ["N-09", "N-16"],
-  "jtbds": ["J-06"],
+  "needs": [
+    "N-09",
+    "N-16"
+  ],
+  "jtbds": [
+    "J-06"
+  ],
   "default_mode": "read-only",
   "destructive_actions": true,
   "requires_confirmation": true,
   "outputs": [
     "custom-hermes-skills/runs/cloudflare-dns-zero-trust-ops/<zone>-<ts>.md"
-  ]
+  ],
+  "learning_enabled": true
 }

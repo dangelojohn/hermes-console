@@ -3,12 +3,18 @@
   "version": "0.1.0",
   "category": "python",
   "summary": "AST-based Python service surface map + route map + untested-module flags + long-function + missing-type-hint findings.",
-  "needs": ["N-17"],
-  "jtbds": ["J-09", "J-10"],
+  "needs": [
+    "N-17"
+  ],
+  "jtbds": [
+    "J-09",
+    "J-10"
+  ],
   "default_mode": "read-only",
   "destructive_actions": false,
   "requires_confirmation": false,
   "outputs": [
     "custom-hermes-skills/runs/python-service-engineer/<service>-<ts>.md"
-  ]
+  ],
+  "learning_enabled": true
 }

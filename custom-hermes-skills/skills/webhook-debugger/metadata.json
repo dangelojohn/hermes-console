@@ -2,13 +2,18 @@
   "name": "webhook-debugger",
   "version": "0.1.0",
   "category": "web-services",
-  "summary": "Trace + audit + replay-dry-run for a producer↔consumer webhook pair (Hermes→Odoo, Forgejo→Odoo, etc.). No live replay.",
-  "needs": ["N-13"],
-  "jtbds": ["J-10"],
+  "summary": "Trace + audit + replay-dry-run for a producer\u2194consumer webhook pair (Hermes\u2192Odoo, Forgejo\u2192Odoo, etc.). No live replay.",
+  "needs": [
+    "N-13"
+  ],
+  "jtbds": [
+    "J-10"
+  ],
   "default_mode": "read-only",
   "destructive_actions": false,
   "requires_confirmation": false,
   "outputs": [
     "custom-hermes-skills/runs/webhook-debugger/<producer>-to-<consumer>-<ts>.md"
-  ]
+  ],
+  "learning_enabled": true
 }

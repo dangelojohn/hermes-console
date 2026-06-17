@@ -35,11 +35,22 @@
   ],
   "version": "0.1.0",
   "summary": "Deep networking and Cloudflare operations skill for the user's Odoo/QNAP/Forgejo/Hermes/web-service stack.",
-  "needs": ["N-09", "N-12", "N-15", "N-16"],
-  "jtbds": ["J-05", "J-06", "J-09", "J-10"],
+  "needs": [
+    "N-09",
+    "N-12",
+    "N-15",
+    "N-16"
+  ],
+  "jtbds": [
+    "J-05",
+    "J-06",
+    "J-09",
+    "J-10"
+  ],
   "destructive_actions": true,
   "requires_confirmation": true,
   "outputs": [
     "custom-hermes-skills/runs/networking-cloudflare-architect/<target>-<ts>.md"
-  ]
+  ],
+  "learning_enabled": true
 }

@@ -3,12 +3,18 @@
   "version": "0.1.0",
   "category": "networking-cloudflare-web-services",
   "summary": "Structured triage for network / Cloudflare / Omada / QNAP / Odoo / Forgejo incidents: 5-whys, evidence table, safe checks, escalation, rollback, post-incident review.",
-  "needs": ["N-15", "N-16"],
-  "jtbds": ["J-04"],
+  "needs": [
+    "N-15",
+    "N-16"
+  ],
+  "jtbds": [
+    "J-04"
+  ],
   "default_mode": "read-only",
   "destructive_actions": false,
   "requires_confirmation": false,
   "outputs": [
     "custom-hermes-skills/runs/network-monitoring-incident-responder/<ts>-<severity>.md"
-  ]
+  ],
+  "learning_enabled": true
 }

@@ -59,7 +59,7 @@ from .models import (
     WhatsAppInboundResponse,
 )
 from .queue import OutboundQueue
-from .tenant_bridges import SouthbrookHermesBridge
+from .tenant_bridges import HomeAssistantBridge, SouthbrookHermesBridge
 from .tenant_bridges.base import TenantBridge
 from .whatsapp import (
     InboundCommand,
@@ -105,6 +105,17 @@ def _build_bridges(settings: Settings) -> Dict[str, TenantBridge]:
             user=settings.southbrook_hermes_user,
             password=settings.southbrook_hermes_password,
             api_key=settings.southbrook_hermes_api_key,
+        )
+    if settings.home_assistant_enabled:
+        bridges["home_assistant"] = HomeAssistantBridge(
+            url=settings.home_assistant_url,
+            token=settings.home_assistant_token,
+            push_service=settings.home_assistant_push_service or None,
+            context_entities=[
+                e.strip()
+                for e in settings.home_assistant_context_entities.split(",")
+                if e.strip()
+            ],
         )
     return bridges
 
@@ -264,14 +275,13 @@ def _register_routes(app: FastAPI) -> None:
 
         sqlite_ok = await store.ping()
         llm_status = await providers.health()
-        bridges_status = {"southbrook_hermes": "disabled"}
-        if "southbrook_hermes" in bridges:
-            try:
-                bridges_status["southbrook_hermes"] = await bridges[
-                    "southbrook_hermes"
-                ].health()
-            except Exception:  # pragma: no cover - defensive
-                bridges_status["southbrook_hermes"] = "unreachable"
+        bridges_status = {"southbrook_hermes": "disabled", "home_assistant": "disabled"}
+        for bname in ("southbrook_hermes", "home_assistant"):
+            if bname in bridges:
+                try:
+                    bridges_status[bname] = await bridges[bname].health()
+                except Exception:  # pragma: no cover - defensive
+                    bridges_status[bname] = "unreachable"
 
         depth = await queue.depth() if sqlite_ok else 0
 
@@ -677,7 +687,10 @@ def _register_routes(app: FastAPI) -> None:
         bridges = _bridges(request)
         results: List[TenantStatus] = []
 
-        known = {"southbrook_hermes": settings.southbrook_hermes_enabled}
+        known = {
+            "southbrook_hermes": settings.southbrook_hermes_enabled,
+            "home_assistant": settings.home_assistant_enabled,
+        }
         test_results = request.app.state.tenant_test_results
         for name, enabled in known.items():
             last = test_results.get(name, {})

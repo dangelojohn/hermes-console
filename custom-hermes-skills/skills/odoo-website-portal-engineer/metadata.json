@@ -3,12 +3,18 @@
   "version": "0.1.0",
   "category": "odoo-frontend",
   "summary": "Build and audit Odoo website + portal flows (QWeb templates, /my/* routes, forms, CSRF, XSS guards).",
-  "needs": ["N-06", "N-16"],
-  "jtbds": ["J-09"],
+  "needs": [
+    "N-06",
+    "N-16"
+  ],
+  "jtbds": [
+    "J-09"
+  ],
   "default_mode": "read-only",
   "destructive_actions": false,
   "requires_confirmation": false,
   "outputs": [
     "custom-hermes-skills/runs/odoo-website-portal-engineer/<addon>-<mode>-<ts>/"
-  ]
+  ],
+  "learning_enabled": true
 }

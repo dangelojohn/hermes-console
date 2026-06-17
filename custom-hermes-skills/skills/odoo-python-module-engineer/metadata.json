@@ -3,12 +3,18 @@
   "version": "0.1.0",
   "category": "odoo-backend",
   "summary": "Per-addon pre-flight: manifest hygiene, data-file alignment, depends correctness, v19 quirk screen, test coverage estimate.",
-  "needs": ["N-02", "N-04"],
-  "jtbds": ["J-01"],
+  "needs": [
+    "N-02",
+    "N-04"
+  ],
+  "jtbds": [
+    "J-01"
+  ],
   "default_mode": "read-only",
   "destructive_actions": false,
   "requires_confirmation": true,
   "outputs": [
     "custom-hermes-skills/runs/odoo-python-module-engineer/<addon>-<ts>.md"
-  ]
+  ],
+  "learning_enabled": true
 }

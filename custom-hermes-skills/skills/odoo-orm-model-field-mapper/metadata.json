@@ -3,13 +3,20 @@
   "version": "0.1.0",
   "category": "odoo-backend",
   "summary": "Per-addon Python AST walk that emits a structured model + field + relation map and v19-quirk flags.",
-  "needs": ["N-01", "N-03", "N-04"],
-  "jtbds": ["J-02"],
+  "needs": [
+    "N-01",
+    "N-03",
+    "N-04"
+  ],
+  "jtbds": [
+    "J-02"
+  ],
   "default_mode": "read-only",
   "destructive_actions": false,
   "requires_confirmation": false,
   "outputs": [
     "custom-hermes-skills/runs/odoo-orm-model-field-mapper/<addon>-<ts>.md",
     "custom-hermes-skills/runs/odoo-orm-model-field-mapper/<addon>-<ts>.json"
-  ]
+  ],
+  "learning_enabled": true
 }

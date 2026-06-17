@@ -3,12 +3,17 @@
   "version": "0.1.0",
   "category": "forgejo",
   "summary": "Generate release notes, CHANGELOG fragments, and documented tag + release-API commands for Forgejo repos.",
-  "needs": ["N-10"],
-  "jtbds": ["J-07"],
+  "needs": [
+    "N-10"
+  ],
+  "jtbds": [
+    "J-07"
+  ],
   "default_mode": "read-only",
   "destructive_actions": false,
   "requires_confirmation": false,
   "outputs": [
     "custom-hermes-skills/runs/forgejo-release-manager/<repo>-<version>.md"
-  ]
+  ],
+  "learning_enabled": true
 }

@@ -3,13 +3,19 @@
   "version": "0.1.0",
   "category": "odoo-backend",
   "summary": "Cross-addon permission matrix + record-rule audit + v19 security-quirk screen.",
-  "needs": ["N-03", "N-16"],
-  "jtbds": ["J-03"],
+  "needs": [
+    "N-03",
+    "N-16"
+  ],
+  "jtbds": [
+    "J-03"
+  ],
   "default_mode": "read-only",
   "destructive_actions": false,
   "requires_confirmation": false,
   "outputs": [
     "custom-hermes-skills/runs/odoo-security-access-auditor/<workspace>-<ts>.md",
     "custom-hermes-skills/runs/odoo-security-access-auditor/<workspace>-<ts>-findings.md"
-  ]
+  ],
+  "learning_enabled": true
 }

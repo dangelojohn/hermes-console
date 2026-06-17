@@ -2,13 +2,18 @@
   "name": "auth-token-safety-auditor",
   "version": "0.1.0",
   "category": "web-services",
-  "summary": "Static analysis of how a codebase handles credentials — without echoing any secret value. Flags hardcoded keys, plaintext logging, broad-scope tokens, missing rotation hooks, auth-bypass routes.",
-  "needs": ["N-16"],
-  "jtbds": ["J-12"],
+  "summary": "Static analysis of how a codebase handles credentials \u2014 without echoing any secret value. Flags hardcoded keys, plaintext logging, broad-scope tokens, missing rotation hooks, auth-bypass routes.",
+  "needs": [
+    "N-16"
+  ],
+  "jtbds": [
+    "J-12"
+  ],
   "default_mode": "read-only",
   "destructive_actions": false,
   "requires_confirmation": false,
   "outputs": [
     "custom-hermes-skills/runs/auth-token-safety-auditor/<target>-<ts>.md"
-  ]
+  ],
+  "learning_enabled": true
 }

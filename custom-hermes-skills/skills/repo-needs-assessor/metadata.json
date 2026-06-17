@@ -3,13 +3,19 @@
   "version": "0.1.0",
   "category": "meta",
   "summary": "Top-level scan that produces or updates a workspace's NEEDS_ASSESSMENT, JTBD_MAP, and per-domain maps.",
-  "needs": ["N-14", "N-18"],
-  "jtbds": ["J-11"],
+  "needs": [
+    "N-14",
+    "N-18"
+  ],
+  "jtbds": [
+    "J-11"
+  ],
   "default_mode": "read-only",
   "destructive_actions": true,
   "requires_confirmation": true,
   "outputs": [
     "<workspace>/NEEDS_ASSESSMENT.md",
     "<workspace>/JTBD_MAP.md"
-  ]
+  ],
+  "learning_enabled": true
 }

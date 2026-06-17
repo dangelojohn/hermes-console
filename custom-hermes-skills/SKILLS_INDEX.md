@@ -1,6 +1,6 @@
 # Skills Index
 
-_Auto-generated from `skills/` by `scripts/build_index.py`. 40 skills._
+_Auto-generated from `skills/` by `scripts/build_index.py`. 42 skills._
 
 | Skill | Category | Summary | Needs | JTBDs |
 |---|---|---|---|---|
@@ -24,6 +24,7 @@ _Auto-generated from `skills/` by `scripts/build_index.py`. 40 skills._
 | `forgejo-release-manager` | forgejo | Generate release notes, CHANGELOG fragments, and documented tag + release-API commands for Forgejo repos. | N-10 | J-07 |
 | `forgejo-repo-maintainer` | forgejo | Per-operation Forgejo admin: list/create repos, rotate tokens, audit users — all with ephemeral CLI-generated tokens that are revoked at the end of the operation. | N-10, N-16 | J-07 |
 | `auth-token-safety-auditor` | web-services | Static analysis of how a codebase handles credentials — without echoing any secret value. Flags hardcoded keys, plaintext logging, broad-scope tokens, missing rotation hooks, auth-bypass routes. | N-16 | J-12 |
+| `home-assistant-integration` | web-services | Operate and audit the Home Assistant tenant bridge: enable, audit, rotate the long-lived token safely, troubleshoot. | N-05, N-13 | J-10 |
 | `service-contract-documenter` | web-services | Generate API / service contract documentation in markdown / OpenAPI / runbook format with placeholder-only examples. | N-05, N-13 | J-10 |
 | `web-services-api-integrator` | web-services | Inspect an HTTP endpoint to produce its contract, or scaffold a new tenant bridge / LLM provider / webhook following the Hermes Console reference implementations. | N-05, N-12, N-13, N-15 | J-09, J-10 |
 | `webhook-debugger` | web-services | Trace + audit + replay-dry-run for a producer↔consumer webhook pair (Hermes→Odoo, Forgejo→Odoo, etc.). No live replay. | N-13 | J-10 |
@@ -42,6 +43,7 @@ _Auto-generated from `skills/` by `scripts/build_index.py`. 40 skills._
 | `hermes-skill-maintainer` | meta | Rebuild the library index, detect duplicates and stale skills, run format-compliance checks, and report Need/JTBD coverage gaps. | N-16 | J-12 |
 | `jtbd-skill-mapper` | meta | Cross-reference JTBDs against built skills; produce coverage matrix or ranked recommendation for the next skill to build. | N-18 | J-11, J-12 |
 | `repo-needs-assessor` | meta | Top-level scan that produces or updates a workspace's NEEDS_ASSESSMENT, JTBD_MAP, and per-domain maps. | N-14, N-18 | J-11 |
+| `self-learning-loop` | meta | Continuous-improvement mechanism: collect per-skill run outcomes, roll up patterns, propose incremental SKILL.md edits. The 'self-learning on' switch for the whole library. | N-18 | J-11, J-12 |
 | `skill-factory-custom` | meta | Generate new Hermes-compatible skills from a documented procedure + a category + Need/JTBD anchors. | N-18 | J-11, J-12 |
 | `skill-integrity-auditor` | meta | Static analysis of an agent-skills library for safety gates, secrets, prompt-injection bait, destructive commands, and license-attribution gaps. | N-16 | J-12 |
 
@@ -78,9 +80,10 @@ _Auto-generated from `skills/` by `scripts/build_index.py`. 40 skills._
 - `forgejo-release-manager` — Generate release notes, CHANGELOG fragments, and documented tag + release-API commands for Forgejo repos.
 - `forgejo-repo-maintainer` — Per-operation Forgejo admin: list/create repos, rotate tokens, audit users — all with ephemeral CLI-generated tokens that are revoked at the end of the operation.
 
-### web-services (4)
+### web-services (5)
 
 - `auth-token-safety-auditor` — Static analysis of how a codebase handles credentials — without echoing any secret value. Flags hardcoded keys, plaintext logging, broad-scope tokens, missing rotation hooks, auth-bypass routes.
+- `home-assistant-integration` — Operate and audit the Home Assistant tenant bridge: enable, audit, rotate the long-lived token safely, troubleshoot.
 - `service-contract-documenter` — Generate API / service contract documentation in markdown / OpenAPI / runbook format with placeholder-only examples.
 - `web-services-api-integrator` — Inspect an HTTP endpoint to produce its contract, or scaffold a new tenant bridge / LLM provider / webhook following the Hermes Console reference implementations.
 - `webhook-debugger` — Trace + audit + replay-dry-run for a producer↔consumer webhook pair (Hermes→Odoo, Forgejo→Odoo, etc.). No live replay.
@@ -108,12 +111,13 @@ _Auto-generated from `skills/` by `scripts/build_index.py`. 40 skills._
 
 - `documentation-synthesizer` — Extract current-state / open-items / runbook content from sprawling source documents, with mandatory line-level citations.
 
-### meta (6)
+### meta (7)
 
 - `automation-runbook-builder` — Convert a real-execution chat-transcript procedure into a versioned, dry-runnable runbook with rollback and validation.
 - `hermes-skill-maintainer` — Rebuild the library index, detect duplicates and stale skills, run format-compliance checks, and report Need/JTBD coverage gaps.
 - `jtbd-skill-mapper` — Cross-reference JTBDs against built skills; produce coverage matrix or ranked recommendation for the next skill to build.
 - `repo-needs-assessor` — Top-level scan that produces or updates a workspace's NEEDS_ASSESSMENT, JTBD_MAP, and per-domain maps.
+- `self-learning-loop` — Continuous-improvement mechanism: collect per-skill run outcomes, roll up patterns, propose incremental SKILL.md edits. The 'self-learning on' switch for the whole library.
 - `skill-factory-custom` — Generate new Hermes-compatible skills from a documented procedure + a category + Need/JTBD anchors.
 - `skill-integrity-auditor` — Static analysis of an agent-skills library for safety gates, secrets, prompt-injection bait, destructive commands, and license-attribution gaps.
 

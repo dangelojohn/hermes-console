@@ -1,0 +1,17 @@
+{
+  "name": "self-learning-loop",
+  "version": "0.1.0",
+  "category": "meta",
+  "summary": "Continuous-improvement mechanism: collect per-skill run outcomes, roll up patterns, propose incremental SKILL.md edits. The 'self-learning on' switch for the whole library.",
+  "needs": ["N-18"],
+  "jtbds": ["J-11", "J-12"],
+  "default_mode": "read-only",
+  "destructive_actions": false,
+  "requires_confirmation": false,
+  "learning_enabled": true,
+  "outputs": [
+    "custom-hermes-skills/learning/<skill>.md",
+    "custom-hermes-skills/learning/_rollup-<ts>.md",
+    "custom-hermes-skills/runs/self-learning-loop/<ts>-proposed-edits/"
+  ]
+}

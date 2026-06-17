@@ -3,12 +3,19 @@
   "version": "0.1.0",
   "category": "qnap",
   "summary": "Single-container inspect / logs / exec-readonly / restart / compose-up with destructive-subcommand blacklist + operator confirmation.",
-  "needs": ["N-07", "N-15"],
-  "jtbds": ["J-05", "J-09"],
+  "needs": [
+    "N-07",
+    "N-15"
+  ],
+  "jtbds": [
+    "J-05",
+    "J-09"
+  ],
   "default_mode": "read-only",
   "destructive_actions": true,
   "requires_confirmation": true,
   "outputs": [
     "custom-hermes-skills/runs/qnap-container-ops/<container>-<mode>-<ts>.md"
-  ]
+  ],
+  "learning_enabled": true
 }

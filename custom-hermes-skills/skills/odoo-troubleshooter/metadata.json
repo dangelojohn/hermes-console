@@ -3,12 +3,18 @@
   "version": "0.1.0",
   "category": "odoo-backend",
   "summary": "Decision-tree triage encoding the user's documented v19 incident history (install fails, asset bundle 500s, cron schema changes, ACL gaps, cold-install gaps).",
-  "needs": ["N-04", "N-15"],
-  "jtbds": ["J-04"],
+  "needs": [
+    "N-04",
+    "N-15"
+  ],
+  "jtbds": [
+    "J-04"
+  ],
   "default_mode": "read-only",
   "destructive_actions": false,
   "requires_confirmation": false,
   "outputs": [
     "custom-hermes-skills/runs/odoo-troubleshooter/<ts>.md"
-  ]
+  ],
+  "learning_enabled": true
 }

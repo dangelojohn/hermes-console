@@ -3,12 +3,18 @@
   "version": "0.1.0",
   "category": "python",
   "summary": "Inventory + safe-run + lint for Python/Odoo tests with no production-DB risk.",
-  "needs": ["N-17"],
-  "jtbds": ["J-01", "J-04"],
+  "needs": [
+    "N-17"
+  ],
+  "jtbds": [
+    "J-01",
+    "J-04"
+  ],
   "default_mode": "read-only",
   "destructive_actions": false,
   "requires_confirmation": false,
   "outputs": [
     "custom-hermes-skills/runs/python-odoo-test-runner/<target>-<mode>-<ts>.md"
-  ]
+  ],
+  "learning_enabled": true
 }

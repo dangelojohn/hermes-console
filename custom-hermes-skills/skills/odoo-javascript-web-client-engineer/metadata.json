@@ -3,12 +3,18 @@
   "version": "0.1.0",
   "category": "odoo-frontend",
   "summary": "Asset-bundle, registry, patch, and debugging skill for the Odoo JS web client; sister to odoo-owl-component-engineer.",
-  "needs": ["N-04", "N-06"],
-  "jtbds": ["J-04"],
+  "needs": [
+    "N-04",
+    "N-06"
+  ],
+  "jtbds": [
+    "J-04"
+  ],
   "default_mode": "read-only",
   "destructive_actions": false,
   "requires_confirmation": false,
   "outputs": [
     "custom-hermes-skills/runs/odoo-javascript-web-client-engineer/<addon>-<ts>.md"
-  ]
+  ],
+  "learning_enabled": true
 }
