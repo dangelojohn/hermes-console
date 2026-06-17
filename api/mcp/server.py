@@ -32,6 +32,10 @@ class MCPServer:
             "initialize": self._handle_initialize,
             "tools/list": self._handle_tools_list,
             "tools/call": self._handle_tools_call,
+            "resources/list": self._handle_resources_list,
+            "resources/read": self._handle_resources_read,
+            "prompts/list": self._handle_prompts_list,
+            "prompts/get": self._handle_prompts_get,
         }
         from api.mcp.tools import list_tools as _list_tools, call_tool as _call_tool
         self._list_tools = _list_tools
@@ -60,6 +64,28 @@ class MCPServer:
             self._store, client_id=self._client_id,
             tool_name=name, arguments=arguments,
         )
+
+    async def _handle_resources_list(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        from api.mcp.resources import list_resources
+        return {"resources": await list_resources()}
+
+    async def _handle_resources_read(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        from api.mcp.resources import read_resource
+        uri = params.get("uri")
+        if not uri:
+            raise ValueError("resources/read requires 'uri'")
+        return await read_resource(uri)
+
+    async def _handle_prompts_list(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        from api.mcp.prompts import list_prompts
+        return {"prompts": await list_prompts()}
+
+    async def _handle_prompts_get(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        from api.mcp.prompts import get_prompt
+        name = params.get("name")
+        if not name:
+            raise ValueError("prompts/get requires 'name'")
+        return await get_prompt(name, params.get("arguments") or {})
 
     async def dispatch(self, message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         method = message.get("method")
