@@ -804,6 +804,21 @@ def _register_routes(app: FastAPI) -> None:
         result = await _queue(request).flush()
         return FlushResponse(**result)
 
+    # ---------------- MCP audit ----------------
+
+    @app.get("/api/mcp/calls")
+    async def list_mcp_calls_endpoint(
+        request: Request,
+        since_hours: int = 24,
+        _: Principal = Depends(require_auth),
+    ) -> Dict[str, Any]:
+        """Audit lens for the MCP service — returns every tool call recorded
+        in the last ``since_hours`` (default 24h). Used by the operator UI
+        and by the ``hermes-mcp-service`` companion skill.
+        """
+        rows = await _store(request).list_mcp_calls(since_hours=since_hours)
+        return {"count": len(rows), "calls": rows}
+
     # ---------------- WhatsApp ----------------
 
     @app.post("/api/whatsapp/inbound", response_model=WhatsAppInboundResponse)
