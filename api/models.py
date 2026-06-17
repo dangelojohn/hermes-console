@@ -147,6 +147,9 @@ class Settings(BaseSettings):
     hermes_sqlite_path: str = Field(
         default="/data/hermes.sqlite", alias="HERMES_SQLITE_PATH"
     )
+    hermes_hub_manifest_path: str = Field(
+        default="/data/hub-manifest.json", alias="HERMES_HUB_MANIFEST_PATH"
+    )
     hermes_tenant_label: str = Field(default="Hermes", alias="HERMES_TENANT_LABEL")
     hermes_tenant_icon: str = Field(
         default="\U0001F985", alias="HERMES_TENANT_ICON"

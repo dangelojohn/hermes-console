@@ -465,8 +465,18 @@ class LeadProspectorLoop:
             "kitchen cabinet manufacturer in Hamilton, Ontario. Your job is "
             "to discover concrete sales prospects from recent public web "
             "sources using google_search. Bias toward verifiable leads with "
-            "a citable source URL. Do NOT invent companies or projects. If "
-            "you can't find enough real prospects, return fewer."
+            "a citable source URL.\n\n"
+            "HARD CONSTRAINT: Only Canadian companies / projects / "
+            "publications are eligible. Any prospect headquartered or "
+            "operating primarily in the United States or any other "
+            "country outside Canada must be SKIPPED — do not return it "
+            "even if it would otherwise be a good fit. If the company is "
+            "binational (Canadian subsidiary of a US firm), include it "
+            "ONLY if you can cite the specifically Canadian entity + "
+            "Canadian contact/address. When in doubt, skip.\n\n"
+            "Do NOT invent companies or projects. If you can't find "
+            "enough real Canadian prospects in the target region, return "
+            "fewer (zero is acceptable)."
         )
 
     def _build_prompt(self, seen: set) -> str:
@@ -479,8 +489,14 @@ class LeadProspectorLoop:
             else ""
         )
         return (
-            f"Find {self._max_per_run} concrete sales prospects for Southbrook "
-            f"Cabinetry in the region: {self._geo_hint}.\n\n"
+            f"Find up to {self._max_per_run} concrete sales prospects for "
+            f"Southbrook Cabinetry in the region: {self._geo_hint}.\n\n"
+            f"REMINDER (do not relax this): every prospect must be a Canadian "
+            f"entity. Any US-based or non-Canadian company is OUT — even if "
+            f"the company is otherwise interesting. Set the `city` field as "
+            f"`<City>, <Province>` (e.g. `Toronto, ON`) and confirm the "
+            f"province before including a prospect; if you cannot confirm "
+            f"the province from the source, skip the prospect.\n\n"
             f"Lead types to consider (a mix is good): {types_human}\n\n"
             f"{skip_block}"
             "For each prospect, return ONE entry in a JSON array. Each entry MUST "

@@ -270,11 +270,26 @@ class SouthbrookHermesBridge:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _recommendation_type_for(rec: Dict[str, Any]) -> str:
+        """Derive the Odoo-side recommendation_type from the rec's source.
+
+        Most agent loops file generic actionable items → ``task``. The
+        lead_prospector loop produces sales prospects → ``prospect``
+        (which the southbrook_hermes addon's action_apply handler routes
+        to ``crm.lead`` creation on approval+apply).
+        """
+        source = (rec.get("source") or "").lower()
+        if source == "lead_prospector":
+            return "prospect"
+        return "task"
+
+    @staticmethod
     def _map_to_controller_payload(rec: Dict[str, Any]) -> Dict[str, Any]:
+        rec_type = SouthbrookHermesBridge._recommendation_type_for(rec)
         return {
             "name": rec.get("title") or "",
             "summary": rec.get("summary") or "",
-            "recommendation_type": "task",
+            "recommendation_type": rec_type,
             "priority": rec.get("priority") or "normal",
             "rationale": rec.get("rationale"),
             "proposed_action": rec.get("proposed_action"),
@@ -284,6 +299,12 @@ class SouthbrookHermesBridge:
             else None,
             "model_provider": rec.get("llm_provider"),
             "model_name": rec.get("llm_model"),
+            # Skip the in-Odoo approval boundary for prospects: the user
+            # has already approved via the Hermes Console UI/WhatsApp, so
+            # we can drive the rec straight to applied (which triggers
+            # crm.lead creation in /odoo/crm). Generic task pushes go
+            # through the normal Fabio approval gate.
+            "auto_apply": rec_type == "prospect",
         }
 
     @staticmethod
@@ -293,7 +314,7 @@ class SouthbrookHermesBridge:
         return {
             "name": rec.get("title") or "",
             "summary": rec.get("summary") or "",
-            "recommendation_type": "task",
+            "recommendation_type": SouthbrookHermesBridge._recommendation_type_for(rec),
             "priority": rec.get("priority") or "normal",
             "rationale": rec.get("rationale") or False,
             "proposed_action": rec.get("proposed_action") or False,
