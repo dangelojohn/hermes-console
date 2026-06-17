@@ -64,6 +64,25 @@ class Settings(BaseSettings):
         default=4096, alias="ANTHROPIC_DEFAULT_MAX_TOKENS"
     )
 
+    # --- WhatsApp notification + command channel ---
+    # Disabled by default so existing deploys are unchanged. When enabled,
+    # hermes-whatsapp sidecar must be running on hermes-net and reachable at
+    # the bridge URL below; otherwise sends quietly no-op.
+    hermes_whatsapp_enabled: bool = Field(
+        default=False, alias="HERMES_WHATSAPP_ENABLED"
+    )
+    hermes_whatsapp_bridge_url: str = Field(
+        default="http://hermes-whatsapp:8901", alias="HERMES_WHATSAPP_BRIDGE_URL"
+    )
+    hermes_whatsapp_shared_secret: str = Field(
+        default="", alias="HERMES_WHATSAPP_SHARED_SECRET"
+    )
+    # E.164 without "+" — the single human operator that recommendation
+    # notifications go to AND the only sender allowed to issue commands.
+    hermes_whatsapp_operator: str = Field(
+        default="", alias="HERMES_WHATSAPP_OPERATOR"
+    )
+
     # --- Southbrook tenant bridge ---
     southbrook_hermes_enabled: bool = Field(
         default=False, alias="SOUTHBROOK_HERMES_ENABLED"
@@ -349,11 +368,45 @@ class BridgesHealth(BaseModel):
     southbrook_hermes: Literal["ok", "disabled", "unreachable"]
 
 
+class WhatsAppHealth(BaseModel):
+    """Status of the hermes-whatsapp sidecar bridge.
+
+    ``ok`` requires both the bridge HTTP endpoint reachable AND the WhatsApp
+    session linked (QR scanned). ``unreachable`` covers both transport and
+    "linked but not initialised" — surface a single state to the UI.
+    """
+    status: Literal["ok", "unreachable", "disabled"] = "disabled"
+
+
+class WhatsAppInboundIn(BaseModel):
+    """Payload posted by hermes-whatsapp when a message arrives."""
+    from_: str = Field(alias="from")
+    body: str
+    received_at: Optional[str] = None
+    message_id: Optional[str] = None
+    has_media: bool = False
+
+    model_config = {"populate_by_name": True}
+
+
+class WhatsAppInboundResponse(BaseModel):
+    """Echoed back to the bridge so the operator sees what Hermes did.
+
+    The bridge optionally sends ``reply`` back to the user; ``handled``
+    distinguishes "Hermes acted on it" from "Hermes filed it as chat".
+    """
+    handled: bool
+    kind: Literal["approve", "reject", "chat", "unknown_rec", "unauthorized"]
+    rec_id: Optional[int] = None
+    reply: Optional[str] = None
+
+
 class HealthResponse(BaseModel):
     api: Literal["ok"]
     sqlite: Literal["ok", "down"]
     llm: LLMHealth
     bridges: BridgesHealth
+    whatsapp: WhatsAppHealth = WhatsAppHealth()
     queue_depth: int
     tenant_label: str
     tenant_icon: str

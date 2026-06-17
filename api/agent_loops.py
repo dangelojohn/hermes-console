@@ -38,12 +38,17 @@ class AgentEnv:
 
     Decoupled from FastAPI request state so loops can be exercised from tests
     by constructing an :class:`AgentEnv` directly.
+
+    :param notifier: optional async callable invoked once per freshly persisted
+        recommendation. Typically the WhatsApp notification hook; ``None`` in
+        tests so they don't need to mock the channel.
     """
 
     llm: ProviderRegistry
     store: Any  # LocalStore — avoid circular import
     settings: Any  # Settings
     logger: logging.Logger
+    notifier: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None
 
 
 class AgentLoop(Protocol):
@@ -286,6 +291,13 @@ async def execute_loop(loop: AgentLoop, env: AgentEnv) -> Dict[str, Any]:
             error_message = (error_message or "") + f"; persist: {exc}"
             continue
         created_ids.append(rec["id"])
+        if env.notifier is not None:
+            try:
+                await env.notifier(rec)
+            except Exception:  # pragma: no cover - notifier must never crash run
+                env.logger.exception(
+                    "agent %s notifier crashed (suppressed)", loop.name
+                )
 
     finished = _utcnow()
     try:

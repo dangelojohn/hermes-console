@@ -50,6 +50,42 @@ services:
         max-file: "5"
 
   # -------------------------------------------------------------------------
+  # WhatsApp bridge — Node.js + whatsapp-web.js, drives a Chrome under the
+  # hood. Persists its WhatsApp session in hermes-whatsapp-session volume so
+  # the QR scan is one-time. Talks to hermes-api over hermes-net.
+  # -------------------------------------------------------------------------
+  hermes-whatsapp:
+    container_name: hermes-whatsapp
+    build:
+      context: ./whatsapp
+      dockerfile: Dockerfile
+    image: hermes-console/whatsapp:latest
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      HERMES_API_URL: http://hermes-api:8000
+    volumes:
+      - hermes-whatsapp-session:/data
+    depends_on:
+      - hermes-api
+    networks:
+      hermes-net:
+        aliases:
+          - hermes-whatsapp
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8901/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # -------------------------------------------------------------------------
   # Vue 3 PWA served by nginx — talks to hermes-api over hermes-net
   # -------------------------------------------------------------------------
   hermes-ui:
@@ -111,3 +147,10 @@ volumes:
       type: none
       o: bind
       device: /share/CACHEDEV3_DATA/Container/hermes-console/data
+  hermes-whatsapp-session:
+    name: hermes-whatsapp-session
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /share/CACHEDEV3_DATA/Container/hermes-console/whatsapp-session

@@ -54,10 +54,19 @@ from .models import (
     RecommendationSummary,
     Settings,
     TenantStatus,
+    WhatsAppHealth,
+    WhatsAppInboundIn,
+    WhatsAppInboundResponse,
 )
 from .queue import OutboundQueue
 from .tenant_bridges import SouthbrookHermesBridge
 from .tenant_bridges.base import TenantBridge
+from .whatsapp import (
+    InboundCommand,
+    WhatsAppClient,
+    parse_inbound_command,
+    render_new_recommendation_message,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +124,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     for bridge in bridges.values():
         await bridge.startup()
 
+    whatsapp = WhatsAppClient(
+        enabled=settings.hermes_whatsapp_enabled,
+        bridge_url=settings.hermes_whatsapp_bridge_url,
+        shared_secret=settings.hermes_whatsapp_shared_secret,
+        operator_e164=settings.hermes_whatsapp_operator,
+    )
+    await whatsapp.startup()
+
     queue = OutboundQueue(
         store=store,
         bridges=bridges,
@@ -126,7 +143,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     runner = AgentLoopRunner(
         loops=loops,
         env_factory=lambda: AgentEnv(
-            llm=providers, store=store, settings=settings, logger=logger
+            llm=providers,
+            store=store,
+            settings=settings,
+            logger=logger,
+            notifier=_make_whatsapp_notifier(whatsapp),
         ),
     )
     await runner.startup()
@@ -135,6 +156,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.store = store
     app.state.providers = providers
     app.state.bridges = bridges
+    app.state.whatsapp = whatsapp
     app.state.queue = queue
     app.state.agent_runner = runner
     app.state.tenant_test_results = {}  # type: Dict[str, Dict[str, Any]]
@@ -145,10 +167,30 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     finally:
         await runner.shutdown()
         await queue.shutdown()
+        await whatsapp.shutdown()
         for bridge in bridges.values():
             await bridge.shutdown()
         await providers.shutdown()
         await store.shutdown()
+
+
+def _make_whatsapp_notifier(whatsapp: WhatsAppClient):
+    """Build the notifier closure handed to AgentEnv.
+
+    The notifier is called by ``execute_loop`` after each freshly-persisted
+    recommendation. It never raises — a broken notification channel must
+    never poison agent runs.
+    """
+    async def _notify(rec: Dict[str, Any]) -> None:
+        if not whatsapp.enabled or not whatsapp.operator:
+            return
+        try:
+            body = render_new_recommendation_message(rec)
+            await whatsapp.notify_operator(body)
+        except Exception:  # pragma: no cover - defensive
+            logger.exception("whatsapp notifier failed (suppressed)")
+
+    return _notify
 
 
 def create_app() -> FastAPI:
@@ -254,6 +296,16 @@ def _register_routes(app: FastAPI) -> None:
                 )
         composed_reason = " ".join(reasons) if reasons else ""
 
+        whatsapp_status = "disabled"
+        whatsapp_client: Optional[WhatsAppClient] = getattr(
+            request.app.state, "whatsapp", None
+        )
+        if whatsapp_client is not None:
+            try:
+                whatsapp_status = await whatsapp_client.health()
+            except Exception:  # pragma: no cover - defensive
+                whatsapp_status = "unreachable"
+
         return HealthResponse(
             api="ok",
             sqlite="ok" if sqlite_ok else "down",
@@ -265,6 +317,7 @@ def _register_routes(app: FastAPI) -> None:
             bridges=BridgesHealth(
                 southbrook_hermes=bridges_status["southbrook_hermes"],  # type: ignore[arg-type]
             ),
+            whatsapp=WhatsAppHealth(status=whatsapp_status),  # type: ignore[arg-type]
             queue_depth=depth,
             tenant_label=settings.hermes_tenant_label,
             tenant_icon=settings.hermes_tenant_icon,
@@ -737,6 +790,99 @@ def _register_routes(app: FastAPI) -> None:
     ) -> FlushResponse:
         result = await _queue(request).flush()
         return FlushResponse(**result)
+
+    # ---------------- WhatsApp ----------------
+
+    @app.post("/api/whatsapp/inbound", response_model=WhatsAppInboundResponse)
+    async def whatsapp_inbound(
+        request: Request,
+        body: WhatsAppInboundIn,
+    ) -> WhatsAppInboundResponse:
+        """Receive a message from the hermes-whatsapp sidecar.
+
+        Auth: ``X-Hermes-Token`` matching ``HERMES_WHATSAPP_SHARED_SECRET``.
+        Sender allow-listing is done at the sidecar (it forwards only from
+        ``HERMES_WHATSAPP_ALLOWED_SENDERS``), but the endpoint also re-checks
+        against the configured operator number — defence in depth.
+
+        Returns a structured response describing what Hermes did so the
+        sidecar can echo a reply back to the user.
+        """
+        settings = _settings(request)
+        provided = request.headers.get("X-Hermes-Token", "")
+        if (
+            not settings.hermes_whatsapp_shared_secret
+            or provided != settings.hermes_whatsapp_shared_secret
+        ):
+            raise HTTPException(status_code=401, detail="unauthorized")
+
+        # Defence-in-depth: only accept commands from the configured operator.
+        # Anything else is filed as chat-without-action.
+        from_e164 = body.from_.lstrip("+")
+        operator = settings.hermes_whatsapp_operator.lstrip("+")
+        if not operator or from_e164 != operator:
+            return WhatsAppInboundResponse(
+                handled=False,
+                kind="unauthorized",
+                reply=None,
+            )
+
+        cmd: InboundCommand = parse_inbound_command(body.body)
+        store = _store(request)
+        whatsapp_client: Optional[WhatsAppClient] = getattr(
+            request.app.state, "whatsapp", None
+        )
+
+        if cmd.kind in ("approve", "reject") and cmd.rec_id is not None:
+            new_state = "approved" if cmd.kind == "approve" else "rejected"
+            try:
+                updated = await store.update_recommendation_state(
+                    cmd.rec_id,
+                    new_state,
+                    reviewer_note=f"via WhatsApp: {cmd.text[:200]}",
+                )
+            except LocalStoreUnavailable as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"local store unavailable: {exc}",
+                ) from exc
+            if updated is None:
+                reply = f"❓ recommendation #{cmd.rec_id} not found"
+                if whatsapp_client is not None:
+                    await whatsapp_client.send(body.from_, reply)
+                return WhatsAppInboundResponse(
+                    handled=False,
+                    kind="unknown_rec",
+                    rec_id=cmd.rec_id,
+                    reply=reply,
+                )
+            verb = "✅ approved" if cmd.kind == "approve" else "🚫 rejected"
+            reply = f"{verb} #{cmd.rec_id} — {updated.get('title', '').strip()[:80]}"
+            if whatsapp_client is not None:
+                await whatsapp_client.send(body.from_, reply)
+            return WhatsAppInboundResponse(
+                handled=True,
+                kind=cmd.kind,  # type: ignore[arg-type]
+                rec_id=cmd.rec_id,
+                reply=reply,
+            )
+
+        # Free-form text: not yet wired into the chat thread surface. Echo
+        # a usage hint so the user knows what commands are supported. The
+        # chat thread integration is a follow-on once the approval loop is
+        # confirmed working end-to-end.
+        reply = (
+            "Hermes here. Reply `approve <id>` or `reject <id>` to act on a "
+            "recommendation (e.g. `approve 47`). Free-form chat is not yet "
+            "wired."
+        )
+        if whatsapp_client is not None and cmd.text:
+            await whatsapp_client.send(body.from_, reply)
+        return WhatsAppInboundResponse(
+            handled=False,
+            kind="chat",
+            reply=reply,
+        )
 
 
 app = create_app()

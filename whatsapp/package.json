@@ -1,0 +1,19 @@
+{
+  "name": "hermes-whatsapp-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "WhatsApp Web bridge for Hermes Console. Runs as a sidecar container next to hermes-api: receives chat messages from a WhatsApp account, forwards them to hermes-api as inbound events; exposes an HTTP endpoint hermes-api calls to send outbound messages.",
+  "main": "bridge.js",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node bridge.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.27.0"
+  }
+}
