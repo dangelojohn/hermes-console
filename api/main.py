@@ -30,9 +30,20 @@ from typing import Any, AsyncIterator, Dict, List, Mapping, Optional
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 
-from .agent_loops import AgentEnv, AgentLoopRunner, build_enabled_loops, execute_loop
+from .agent_loops import (
+    AgentEnv,
+    AgentLoopRunner,
+    build_enabled_loops,
+    build_lead_prospector_loop,
+    execute_loop,
+)
 from .auth import Principal, require_auth
-from .llm import LLMError, LLMRateLimited, ProviderRegistry
+from .llm import (
+    GeminiGroundedClient,
+    LLMError,
+    LLMRateLimited,
+    ProviderRegistry,
+)
 from .local_store import LocalStore, LocalStoreUnavailable
 from .models import (
     ActionResult,
@@ -150,7 +161,33 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     await queue.startup()
 
+    # Build the standard loops (platform_health / daily_digest / backup_health).
     loops = build_enabled_loops(settings)
+
+    # Lead Prospector needs a Gemini-grounded client — kept off the
+    # standard ProviderRegistry because the native /v1beta API has a
+    # different wire format from the OpenAI-compat shim. Shares the same
+    # API key (OPENAI_API_KEY — the Gemini key) since both endpoints are
+    # served by Google AI Studio.
+    gemini_grounded: Optional[GeminiGroundedClient] = None
+    if (
+        settings.hermes_lead_prospector_enabled
+        and "lead_prospector" in settings.enabled_agent_loops()
+        and settings.openai_api_key
+    ):
+        gemini_grounded = GeminiGroundedClient(
+            api_key=settings.openai_api_key,
+            base_url=settings.hermes_lead_prospector_base_url,
+            default_model=settings.hermes_lead_prospector_model,
+        )
+        await gemini_grounded.startup()
+        loops.append(build_lead_prospector_loop(settings, gemini_grounded))
+        logger.info(
+            "lead_prospector loop registered (model=%s, daily_cap=%d)",
+            settings.hermes_lead_prospector_model,
+            settings.hermes_lead_prospector_max_per_run,
+        )
+
     runner = AgentLoopRunner(
         loops=loops,
         env_factory=lambda: AgentEnv(
@@ -178,6 +215,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     finally:
         await runner.shutdown()
         await queue.shutdown()
+        if gemini_grounded is not None:
+            await gemini_grounded.shutdown()
         await whatsapp.shutdown()
         for bridge in bridges.values():
             await bridge.shutdown()

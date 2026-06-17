@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Protocol
@@ -355,6 +356,279 @@ class BackupHealthLoop:
         return [created]
 
 
+class LeadProspectorLoop:
+    """Discover external sales prospects via Gemini-grounded Google Search.
+
+    Daily-fire loop. Asks Gemini's native /v1beta API (with the
+    ``google_search`` tool) to find N current prospects across four lead
+    types — construction/renovation projects, kitchen manufacturers,
+    general contractors / designers, trade publication leads — in the
+    configured geo. Files one ``prospect_lead`` recommendation per
+    prospect into the queue.
+
+    Dedup: scans recent recommendations (48h) with ``source="lead_prospector"``
+    and skips any prospect whose normalised company name has already been
+    filed. Prevents the same Houzz remodeling project from re-showing
+    every day.
+
+    Failure mode: if Gemini is rate-limited or unreachable, the run logs
+    an error and emits zero recommendations — does NOT degrade to a fake
+    or hallucinated prospect.
+
+    CRM integration (creating ``crm.lead`` in Southbrook Odoo when the
+    user approves+applies a prospect_lead) is deferred to v2 once the
+    operator has reviewed several batches and confirmed lead quality.
+    """
+
+    name = "lead_prospector"
+
+    def __init__(
+        self,
+        *,
+        gemini_grounded: Any,  # llm.GeminiGroundedClient — typed Any to avoid circular import
+        interval_seconds: int,
+        max_per_run: int,
+        geo_hint: str,
+        lead_types: List[str],
+    ) -> None:
+        self._gemini = gemini_grounded
+        self.interval_seconds = interval_seconds
+        self._max_per_run = max_per_run
+        self._geo_hint = geo_hint
+        self._lead_types = lead_types
+
+    async def run(self, env: AgentEnv) -> List[Dict[str, Any]]:
+        seen_companies = await self._recent_seen_companies(env, hours=48)
+        env.logger.info(
+            "lead_prospector: %d companies already in pending queue (will dedup)",
+            len(seen_companies),
+        )
+
+        prompt = self._build_prompt(seen_companies)
+        system = self._system_prompt()
+
+        try:
+            result = await self._gemini.search_and_chat(
+                prompt,
+                system=system,
+                temperature=0.3,
+                max_tokens=8192,
+            )
+        except LLMError as exc:
+            env.logger.warning(
+                "lead_prospector: Gemini call failed (%s); 0 prospects this run",
+                exc,
+            )
+            raise  # execute_loop catches LLMError and records the error run
+
+        text = result.get("text") or ""
+        citations = result.get("citations") or []
+        prospects = self._extract_json_prospects(text)
+        env.logger.info(
+            "lead_prospector: %d prospects parsed from Gemini (citations=%d)",
+            len(prospects),
+            len(citations),
+        )
+
+        created: List[Dict[str, Any]] = []
+        for p in prospects[: self._max_per_run]:
+            company = (p.get("company") or "").strip()
+            if not company:
+                continue
+            norm = self._normalise_company(company)
+            if norm in seen_companies:
+                env.logger.info(
+                    "lead_prospector: skipping dup '%s' (already filed in 48h)",
+                    company,
+                )
+                continue
+            seen_companies.add(norm)
+            rec_vals = self._build_recommendation(p, citations)
+            try:
+                rec = await env.store.create_recommendation(rec_vals)
+            except Exception as exc:  # pragma: no cover - store down
+                env.logger.warning(
+                    "lead_prospector: failed to persist %s: %s", company, exc
+                )
+                continue
+            created.append(rec)
+
+        return created
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _system_prompt(self) -> str:
+        return (
+            "You are the lead-prospecting agent for Southbrook Cabinetry, a "
+            "kitchen cabinet manufacturer in Hamilton, Ontario. Your job is "
+            "to discover concrete sales prospects from recent public web "
+            "sources using google_search. Bias toward verifiable leads with "
+            "a citable source URL. Do NOT invent companies or projects. If "
+            "you can't find enough real prospects, return fewer."
+        )
+
+    def _build_prompt(self, seen: set) -> str:
+        seen_list = sorted(seen)
+        types_human = ", ".join(self._lead_types)
+        skip_block = (
+            f"DO NOT re-suggest these companies (already in our pipeline): "
+            f"{', '.join(seen_list[:50])}\n\n"
+            if seen_list
+            else ""
+        )
+        return (
+            f"Find {self._max_per_run} concrete sales prospects for Southbrook "
+            f"Cabinetry in the region: {self._geo_hint}.\n\n"
+            f"Lead types to consider (a mix is good): {types_human}\n\n"
+            f"{skip_block}"
+            "For each prospect, return ONE entry in a JSON array. Each entry MUST "
+            "have these keys:\n"
+            '  "company": str (the entity name)\n'
+            '  "lead_type": one of {' + ", ".join(self._lead_types) + "}\n"
+            '  "city": str (city + province/state)\n'
+            '  "source_url": str (a citable URL Gemini surfaced — REQUIRED)\n'
+            '  "why_fit": str (1-2 sentences why Southbrook should reach out)\n'
+            '  "contact_hint": str | null (email/phone/contact form URL if discoverable)\n'
+            '  "priority": one of {"low", "normal", "high"} based on signal strength\n\n'
+            "Output ONLY the JSON array (no preamble, no markdown fence). "
+            "If you can't find a citable source URL for a prospect, OMIT IT — "
+            "no hallucinated URLs. Returning fewer real prospects is better than "
+            "padding with guesses.\n"
+        )
+
+    @staticmethod
+    def _extract_json_prospects(text: str) -> List[Dict[str, Any]]:
+        """Extract the JSON array from the Gemini response.
+
+        Grounded responses sometimes wrap JSON in a code fence or have
+        leading prose — pull out the first JSON array we can find.
+        """
+        if not text:
+            return []
+        # Try direct parse first (model obeyed "output only JSON")
+        try:
+            data = json.loads(text)
+            if isinstance(data, list):
+                return [d for d in data if isinstance(d, dict)]
+        except json.JSONDecodeError:
+            pass
+        # Otherwise, regex out the largest [ ... ] block
+        match = re.search(r"\[\s*\{.*?\}\s*\]", text, re.DOTALL)
+        if match:
+            try:
+                data = json.loads(match.group(0))
+                if isinstance(data, list):
+                    return [d for d in data if isinstance(d, dict)]
+            except json.JSONDecodeError:
+                return []
+        return []
+
+    @staticmethod
+    def _normalise_company(name: str) -> str:
+        # Dedup key: case-fold + strip common business suffixes that vary
+        # by jurisdiction (Inc / Ltd / LLC / Corp). A "John Doe Construction
+        # Inc" and "John Doe Construction Ltd" are almost certainly the
+        # same lead from our perspective.
+        s = name.casefold().strip()
+        for suffix in (
+            " inc.",
+            " inc",
+            " ltd.",
+            " ltd",
+            " llc",
+            " l.l.c.",
+            " corp.",
+            " corp",
+            " co.",
+            " co",
+            ".",
+            ",",
+        ):
+            if s.endswith(suffix):
+                s = s[: -len(suffix)].strip()
+        return s
+
+    async def _recent_seen_companies(
+        self, env: AgentEnv, *, hours: int
+    ) -> set:
+        recent = await env.store.recent_recommendations_for_digest(hours=hours)
+        seen = set()
+        for r in recent:
+            if r.get("source") != self.name:
+                continue
+            payload = r.get("payload") or {}
+            company = (payload.get("company") or "").strip()
+            if company:
+                seen.add(self._normalise_company(company))
+        return seen
+
+    def _build_recommendation(
+        self,
+        prospect: Dict[str, Any],
+        citations: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        company = (prospect.get("company") or "Unknown company").strip()
+        lead_type = (prospect.get("lead_type") or "unknown").strip()
+        city = (prospect.get("city") or "").strip()
+        source_url = (prospect.get("source_url") or "").strip()
+        why_fit = (prospect.get("why_fit") or "").strip()
+        contact_hint = (prospect.get("contact_hint") or "").strip() or None
+        priority = (prospect.get("priority") or "normal").lower()
+        if priority not in ("low", "normal", "high", "blocker"):
+            priority = "normal"
+
+        title = f"Prospect: {company}"
+        if city:
+            title = f"{title} ({city})"
+
+        summary_lines = [
+            f"Type: {lead_type}",
+            f"City: {city or '?'}",
+            f"Source: {source_url or '?'}",
+        ]
+        if contact_hint:
+            summary_lines.append(f"Contact: {contact_hint}")
+        if why_fit:
+            summary_lines.append("")
+            summary_lines.append(why_fit)
+        summary = "\n".join(summary_lines)
+
+        rationale = (
+            "Discovered by lead_prospector agent via Gemini grounded "
+            "Google search. Verify the source URL and confirm the "
+            "prospect is reachable before approving + handing to sales. "
+            "Approving this recommendation does NOT yet create a "
+            "crm.lead in Odoo (v2 follow-on)."
+        )
+
+        proposed_action = (
+            f"Open the source URL ({source_url or 'TBD'}) to confirm the "
+            "prospect, then (manual for now) create a crm.lead in Southbrook "
+            "Odoo and assign to sales."
+        )
+
+        return {
+            "title": title,
+            "summary": summary,
+            "rationale": rationale,
+            "proposed_action": proposed_action,
+            "priority": priority,
+            "source": self.name,
+            "tenant_hint": "southbrook_hermes",
+            "payload": {
+                "company": company,
+                "lead_type": lead_type,
+                "city": city,
+                "source_url": source_url,
+                "contact_hint": contact_hint,
+                "why_fit": why_fit,
+                "citation_count": len(citations),
+            },
+        }
+
+
 _BUILT_IN_LOOPS: Dict[str, Callable[["Any"], AgentLoop]] = {
     "platform_health": lambda settings: PlatformHealthLoop(
         interval_seconds=settings.hermes_platform_health_interval
@@ -366,6 +640,27 @@ _BUILT_IN_LOOPS: Dict[str, Callable[["Any"], AgentLoop]] = {
         max_age_hours=settings.hermes_backup_max_age_hours,
     ),
 }
+
+
+def build_lead_prospector_loop(
+    settings: Any, gemini_grounded: Any
+) -> "LeadProspectorLoop":
+    """Factory called from main.py after the GeminiGroundedClient is created.
+
+    Kept separate from ``_BUILT_IN_LOOPS`` because the loop needs the
+    Gemini client (not derivable from settings alone).
+    """
+    return LeadProspectorLoop(
+        gemini_grounded=gemini_grounded,
+        interval_seconds=settings.hermes_lead_prospector_interval,
+        max_per_run=settings.hermes_lead_prospector_max_per_run,
+        geo_hint=settings.hermes_lead_prospector_geo_hint,
+        lead_types=[
+            t.strip()
+            for t in settings.hermes_lead_prospector_lead_types.split(",")
+            if t.strip()
+        ],
+    )
 
 
 def build_enabled_loops(settings: Any) -> List[AgentLoop]:

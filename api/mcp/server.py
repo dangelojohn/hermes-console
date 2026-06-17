@@ -229,14 +229,35 @@ async def run_stdio(db_path: str, key: str) -> int:
             registrar = {"register_tool": _rt, "ToolSpec": _TS}
 
             cf_token = _os.environ.get("CLOUDFLARE_API_TOKEN", "")
+            cf_auth = (
+                {"Authorization": f"Bearer {cf_token}"} if cf_token else None
+            )
+            # Cloudflare-hosted MCPs. docs is public; the others need a token
+            # and will silently no-op (logged warning) when one isn't set.
             upstreams_to_try = [
                 _UpstreamConfig(
                     name="cloudflare-docs",
                     url="https://docs.mcp.cloudflare.com/mcp",
                     prefix="cf_docs",
-                    headers=(
-                        {"Authorization": f"Bearer {cf_token}"} if cf_token else None
-                    ),
+                    headers=cf_auth,
+                ),
+                _UpstreamConfig(
+                    name="cloudflare-observability",
+                    url="https://observability.mcp.cloudflare.com/mcp",
+                    prefix="cf_obs",
+                    headers=cf_auth,
+                ),
+                _UpstreamConfig(
+                    name="cloudflare-auditlogs",
+                    url="https://auditlogs.mcp.cloudflare.com/mcp",
+                    prefix="cf_audit",
+                    headers=cf_auth,
+                ),
+                _UpstreamConfig(
+                    name="cloudflare-dns-analytics",
+                    url="https://dns-analytics.mcp.cloudflare.com/mcp",
+                    prefix="cf_dns",
+                    headers=cf_auth,
                 ),
             ]
             for cfg in upstreams_to_try:

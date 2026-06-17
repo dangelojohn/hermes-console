@@ -305,6 +305,181 @@ class LLMClient:
         return out
 
 
+class GeminiGroundedClient:
+    """Google Gemini native /v1beta client with built-in google_search grounding.
+
+    Distinct from the OpenAI-compatible Gemini shim used by ``LLMClient`` —
+    that endpoint cannot enable ``tools: [google_search]``. The native API
+    can, which is the entire reason this class exists: agent loops that
+    need to discover external facts (lead prospects, market intel) need a
+    grounded LLM, and grounded LLM requires the native shape.
+
+    Wire format vs OpenAI:
+      * URL          POST /v1beta/models/{model}:generateContent
+      * Auth         x-goog-api-key header (NOT Bearer)
+      * Messages     ``contents: [{role, parts: [{text}]}]`` (no system role;
+                     ``systemInstruction`` is a sibling field)
+      * Tools        ``tools: [{google_search: {}}]`` enables grounding
+      * Output       ``candidates[0].content.parts[0].text`` (string)
+      * Citations    ``candidates[0].groundingMetadata.groundingChunks``
+
+    Notes:
+      * ``responseMimeType="application/json"`` is INCOMPATIBLE with
+        google_search grounding (the schema enforcement strips citations).
+        Callers must ask for JSON in the prompt and parse the response.
+      * Quota: same daily/minute caps as the OpenAI-compat Gemini path —
+        the key is shared. Free-tier 250 RPD on gemini-2.5-flash.
+    """
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        base_url: str,
+        default_model: str,
+    ) -> None:
+        if not api_key:
+            raise ValueError("gemini_grounded: api_key required")
+        self._api_key = api_key
+        self._base_url = base_url.rstrip("/")
+        self._default_model = default_model
+        self._client: Optional[httpx.AsyncClient] = None
+        self._lock = asyncio.Lock()
+
+    @property
+    def default_model(self) -> str:
+        return self._default_model
+
+    async def startup(self) -> None:
+        async with self._lock:
+            if self._client is None:
+                self._client = httpx.AsyncClient(
+                    base_url=self._base_url,
+                    timeout=DEFAULT_TIMEOUT,
+                    headers={
+                        "x-goog-api-key": self._api_key,
+                        "Content-Type": "application/json",
+                    },
+                )
+        logger.info(
+            "gemini_grounded client ready base=%s key=%s model=%s",
+            self._base_url,
+            _redact_key(self._api_key),
+            self._default_model,
+        )
+
+    async def shutdown(self) -> None:
+        async with self._lock:
+            if self._client is not None:
+                await self._client.aclose()
+                self._client = None
+
+    async def _ensure_client(self) -> httpx.AsyncClient:
+        if self._client is None:
+            await self.startup()
+        assert self._client is not None
+        return self._client
+
+    async def search_and_chat(
+        self,
+        prompt: str,
+        *,
+        system: Optional[str] = None,
+        model: Optional[str] = None,
+        temperature: float = 0.4,
+        max_tokens: int = 8192,
+    ) -> Dict[str, Any]:
+        """Generate with grounded Google search. Returns dict with text + citations.
+
+        Returns: ``{"text": <str>, "citations": [<dict>], "model": <str>}``.
+        Raises :class:`LLMUnavailable` / :class:`LLMRejected` /
+        :class:`LLMRateLimited` consistently with the other clients.
+        """
+        client = await self._ensure_client()
+        chosen_model = model or self._default_model
+        path = f"/models/{chosen_model}:generateContent"
+
+        body: Dict[str, Any] = {
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "tools": [{"google_search": {}}],
+            "generationConfig": {
+                "temperature": temperature,
+                "maxOutputTokens": max_tokens,
+            },
+        }
+        if system:
+            body["systemInstruction"] = {"parts": [{"text": system}]}
+
+        try:
+            resp = await client.post(path, json=body)
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
+            raise LLMUnavailable(
+                f"gemini_grounded: transport error ({exc.__class__.__name__})"
+            ) from exc
+        except httpx.RequestError as exc:
+            raise LLMUnavailable(
+                f"gemini_grounded: request error ({exc.__class__.__name__})"
+            ) from exc
+
+        if resp.status_code >= 500:
+            raise LLMUnavailable(
+                f"gemini_grounded: 5xx from upstream ({resp.status_code})"
+            )
+        if resp.status_code == 401 or resp.status_code == 403:
+            raise LLMRejected(
+                f"gemini_grounded: auth rejected ({resp.status_code})"
+            )
+        if resp.status_code == 429:
+            detail = resp.text[:400]
+            raise LLMRateLimited(
+                f"gemini_grounded: 429 (quota exhausted) {detail}"
+            )
+        if resp.status_code >= 400:
+            detail = resp.text[:400]
+            raise LLMRejected(f"gemini_grounded: {resp.status_code} {detail}")
+
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            raise LLMUnavailable("gemini_grounded: non-json response") from exc
+
+        candidates = data.get("candidates") or []
+        if not candidates:
+            raise LLMRejected("gemini_grounded: no candidates in response")
+        cand = candidates[0]
+        content = cand.get("content") or {}
+        parts = content.get("parts") or []
+        text = "".join(p.get("text", "") for p in parts if isinstance(p, dict))
+
+        citations: List[Dict[str, Any]] = []
+        gm = cand.get("groundingMetadata") or {}
+        for chunk in gm.get("groundingChunks") or []:
+            web = chunk.get("web") or {}
+            if web.get("uri"):
+                citations.append(
+                    {"uri": web.get("uri"), "title": web.get("title") or ""}
+                )
+
+        return {
+            "text": text,
+            "citations": citations,
+            "model": chosen_model,
+        }
+
+    async def health(self) -> str:
+        """Probe via a GET to /models (lightweight; same auth as chat)."""
+        client = await self._ensure_client()
+        try:
+            resp = await client.get("/models", timeout=HEALTH_TIMEOUT)
+        except httpx.RequestError:
+            return "unavailable"
+        if resp.status_code == 200:
+            return "ok"
+        if resp.status_code == 429:
+            return "rate_limited"
+        return "unavailable"
+
+
 class AnthropicLLMClient:
     """Anthropic /v1/messages client mirroring the LLMClient interface.
 

@@ -156,6 +156,49 @@ class Settings(BaseSettings):
         default="/data/backup-status/last-run.json",
         alias="HERMES_BACKUP_STATUS_PATH",
     )
+
+    # --- Lead Prospector loop ---
+    # Daily-fire agent that uses Gemini's native /v1beta API with the
+    # google_search grounding tool to discover new sales prospects:
+    # construction/renovation projects, competing kitchen manufacturers,
+    # general contractors + designers, trade publication leads. Files
+    # one recommendation per prospect into the queue (kind=prospect_lead).
+    # The CRM crm.lead creation on approve+apply is a v2 follow-on.
+    #
+    # The Gemini API key is shared with the OpenAI-compat (Gemini) shim
+    # used by the LLM provider registry — same key in OPENAI_API_KEY.
+    # That's intentional: one Google AI Studio key, two endpoints.
+    hermes_lead_prospector_enabled: bool = Field(
+        default=False, alias="HERMES_LEAD_PROSPECTOR_ENABLED"
+    )
+    hermes_lead_prospector_model: str = Field(
+        default="gemini-2.5-flash",
+        alias="HERMES_LEAD_PROSPECTOR_MODEL",
+    )
+    hermes_lead_prospector_base_url: str = Field(
+        default="https://generativelanguage.googleapis.com/v1beta",
+        alias="HERMES_LEAD_PROSPECTOR_BASE_URL",
+    )
+    hermes_lead_prospector_interval: int = Field(
+        default=86400, alias="HERMES_LEAD_PROSPECTOR_INTERVAL"
+    )
+    hermes_lead_prospector_max_per_run: int = Field(
+        default=5, alias="HERMES_LEAD_PROSPECTOR_MAX_PER_RUN"
+    )
+    # Free-form region hint passed verbatim into the prompt — Gemini's
+    # grounded search uses it to bias results. Defaults: Southbrook's
+    # actual sales footprint (Hamilton + GTA + adjacent Ontario + the
+    # cross-border Western NY dealer market the case study references).
+    hermes_lead_prospector_geo_hint: str = Field(
+        default="Ontario, Canada (Hamilton, Toronto, GTA, surrounding 905/289/416/647/437/519/705) and adjacent Western New York (Buffalo, Niagara, Rochester)",
+        alias="HERMES_LEAD_PROSPECTOR_GEO_HINT",
+    )
+    # Comma-separated. Default covers all four lead types from the design.
+    hermes_lead_prospector_lead_types: str = Field(
+        default="construction_renovation_project,kitchen_manufacturer,general_contractor_designer,trade_publication_lead",
+        alias="HERMES_LEAD_PROSPECTOR_LEAD_TYPES",
+    )
+
     hermes_backup_max_age_hours: int = Field(
         default=26, alias="HERMES_BACKUP_MAX_AGE_HOURS"
     )
