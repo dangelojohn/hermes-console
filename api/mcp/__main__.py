@@ -20,7 +20,8 @@ from api.mcp.auth import generate_key, hash_key
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="api.mcp", description="Hermes MCP service")
     sub = parser.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("stdio", help="Run the MCP stdio server")
+    st = sub.add_parser("stdio", help="Run the MCP stdio server")
+    st.add_argument("--key", required=True, help="Per-agent API key")
     kg = sub.add_parser("keygen", help="Create a new per-agent API key")
     kg.add_argument("--client", required=True, help="Logical name for the client")
     keys = sub.add_parser("keys", help="List or revoke existing keys")
@@ -87,8 +88,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     if args.cmd == "stdio":
-        print("stdio: not implemented yet (Task 9)", file=sys.stderr)
-        return 1
+        from api.mcp.server import run_stdio
+        return asyncio.run(run_stdio(_db_path(), args.key))
     if args.cmd == "keygen":
         return asyncio.run(_keygen(args.client))
     if args.cmd == "keys":
