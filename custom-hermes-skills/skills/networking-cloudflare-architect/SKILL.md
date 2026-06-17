@@ -263,7 +263,14 @@ Live snapshots in `evidence/qnap-network-snapshot-2026-06-16.md` and `evidence/q
 - `alfacore-caddy` multi-attached to 12 of 16 bridges
 - `cloudflared` on host network
 
-**Known routing flake (still open):** Forgejo HTTPS Git push via `git.southbrookcabinetry.space/git/...` returns 307 that adds an extra `/git/` → 404. Caddy or Cloudflare Configuration Rule layer.
+**Known routing flake — ROOT CAUSE identified 2026-06-16:** `git.southbrookcabinetry.space` tunnel ingress points to `http://192.168.68.108:9080` — but the QNAP is at `192.168.68.76` now (DHCP renewed). Tunnel connector can't reach the stale IP → 307/404. Fix: edit the tunnel ingress in Cloudflare dashboard to `http://localhost:9080` (mirror `git.odooiq.com`).
+
+**Cloudflare account anchors (from snapshot `evidence/cloudflare-account-snapshot-2026-06-16.md`):**
+- Account ID `2ed2c7f49d4d55d86af59d301e4c39b9`; Free plan, 7 zones
+- Tunnel ID `dcc94796-f7b7-45ab-b932-9b746d377c01`; daemon `2026.5.0`; replicas=1
+- PoPs `yyz01/06/04`; QNAP public IP `209.227.150.89`
+- Access team `divine-heart-1e81.cloudflareaccess.com`; 4 Access apps, 5 reusable policies
+- All zones SSL = `Full` (NOT Full-strict)
 
 ## Source inspiration
 

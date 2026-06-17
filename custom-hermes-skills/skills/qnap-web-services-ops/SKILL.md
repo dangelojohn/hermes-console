@@ -119,9 +119,30 @@ sapienzium-net=172.30.8.5   southbrook-net=172.30.4.7  tribancs-net=172.30.16.5
 | 9444–9452 | Per-site dedicated ports |
 | 2222 | Forgejo SSH → `forgejo:22` (LAN-bound; tunnel routing for `git.southbrookcabinetry.space` is separate) |
 
-**`cloudflared` runs on host network** (Cloudflare tunnel `qnap-odooiq`). It can reach every container subnet through the host namespace.
+**`cloudflared` runs on host network** (Cloudflare tunnel `qnap-odooiq` ID `dcc94796-f7b7-45ab-b932-9b746d377c01`, daemon `2026.5.0`). It can reach every container subnet through the host namespace. QNAP public IP `209.227.150.89`; PoPs `yyz01/06/04`.
 
 **Cloudflare Access team:** `divine-heart-1e81.cloudflareaccess.com`; default IdP for new apps is email-OTP.
+
+### Tunnel ingress map (14 public hostnames — source of truth)
+
+| Public hostname | Local origin | Notes |
+|---|---|---|
+| `southbrookcabinetry.space` | `https://localhost:9444` | Odoo demo apex |
+| `sapienzium.com` | `https://localhost:9445` | Odoo demo apex |
+| `demo.porterly.ca` | `https://localhost:9446` | Odoo demo |
+| `demo.tribancs.com` | `https://localhost:9447` | Odoo demo |
+| `demo.odooiq.com` | `https://localhost:9448` | Odoo 19 CE demo |
+| `demo.quattroporte.store` | `https://localhost:9449` | Odoo demo |
+| `demo.odooai.ca` | `https://localhost:9450` | Odoo demo |
+| `qnap.odooiq.com` | `http://localhost:8080` | QTS admin (Access "Owner only") |
+| `webdav.odooiq.com` | `http://localhost:8080` | WebDAV (Access "WebDAV Access" + service-token) |
+| `git.odooiq.com` | `http://localhost:9080` | Forgejo |
+| `git.southbrookcabinetry.space` | **`http://192.168.68.108:9080` (STALE — fix to `http://localhost:9080`)** | Root cause of 307/404 flake |
+| `ssh.odooiq.com` | `ssh://localhost:22` | Browser SSH via Zero Trust |
+| `ssh.southbrookcabinetry.space` | `ssh://localhost:22` | SSH (Access "Allow dangelo.john") |
+| `hermes.odooiq.com` | `http://localhost:9080` | Hermes Console (no Access app — fully public; consider gating) |
+
+WAF: 1 custom rule on `southbrookcabinetry.space` (SKIP for `/api/v1/`, `/web/session/authenticate`, `/agent/v1/`). No managed WAF (Free plan).
 
 ## Source inspiration
 

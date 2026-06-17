@@ -119,22 +119,52 @@ $ python3 scripts/run_skill.py cloudflare-dns-zero-trust-ops \
 
 Live evidence in `evidence/qnap-network-snapshot-2026-06-16.md`.
 
-**Cloudflare account anchors:**
-- Tunnel: `qnap-odooiq` (single tunnel; cloudflared container on QNAP host network)
-- Access team: `divine-heart-1e81.cloudflareaccess.com`
-- Default IdP for new Access apps: email-OTP on `dangelo.john@gmail.com`
-- Known zones (verify via API): `odooiq.com`, `southbrookcabinetry.space`, plus demo-site domains (sapienzium.com, tribancs.*, quattroporte.*, porterly.*, odooai.*)
+**Cloudflare account anchors** (from snapshot `evidence/cloudflare-account-snapshot-2026-06-16.md`):
+- Account ID: `2ed2c7f49d4d55d86af59d301e4c39b9`; owner email `dangelo.john@gmail.com`
+- Plan: Free on all zones + Zero Trust Teams Free Base (1/50 seats; renews 2026-06-24)
+- Tunnel: `qnap-odooiq` ID `dcc94796-f7b7-45ab-b932-9b746d377c01`; daemon `2026.5.0`; replicas=1; PoPs `yyz01/06/04`; origin public IP `209.227.150.89`
+- Access team: `divine-heart-1e81.cloudflareaccess.com`; default IdP: email-OTP on `dangelo.john@gmail.com`
+
+**7 zones (all Free + Active + Full DNS + SSL mode Full):**
+
+| Zone | Zone ID | Registrar |
+|---|---|---|
+| `odooiq.com` | `0a362c265803ca3bca750e637f101296` | Domain.com |
+| `southbrookcabinetry.space` | `d23781a5de3e665a6b8afd04623c22df` | TucowsRadix-web |
+| `tribancs.com` | `c8040d9d88b6db085ec6fec45a03ba15` | — |
+| `sapienzium.com` | `079d0e0b9353b0e5cff71bdb34cb00c2` | — |
+| `quattroporte.store` | `9aed225cebcf7f0436ad6c229351733f` | TucowsRadix-web |
+| `odooai.ca` | `2c600aa4f6834ac4894ac8e7d2ce0151` | Network Solutions Canada ULC |
+| `porterly.ca` | `ebb992bd6d1d1dd64e0927631b5d138b` | Network Solutions Canada ULC |
+
+**Access apps (4 total) + reusable policies (5):** see snapshot for IDs.
+
+| App | Hostname | Policy |
+|---|---|---|
+| QNAP SSH | `ssh.southbrookcabinetry.space` | "Allow dangelo.john" `3e63d3f4-…` |
+| QNAP SSH | `ssh.odooiq.com` | "Owner only" `a4f2b519-…` (browser SSH) |
+| webdav | `webdav.odooiq.com` | "QNAP WebDAV Access" `f8e52ce6-…` + service-token `cc4a0aff-…` |
+| QNAP Admin | `qnap.odooiq.com` | "Owner only" `3cd567a3-…` |
+
+**No Workers, no Pages, no R2, no KV, no D1.** Email routing on `odooiq.com` is "Syncing / DNS not configured."
+
+**WAF status:** No Free-plan managed WAF. Only one custom rule exists: on `southbrookcabinetry.space` ("Allow scripted API + deploy clients" SKIP rule, 75 events 24h).
+
+**Mail (all zones):** MX `66.96.140.170` + `.171` (Netfirms), MUST stay DNS-only. SPF `ip4:66.96.128.0/18 include:websitewelcome.com ~all`. DMARC `p=none` (lax; tighten to quarantine after rua reports stay clean).
 
 **Origin facts (the other side of every DNS record this skill audits):**
 - All public hostnames terminate to `alfacore-caddy` on QNAP host ports 9080/9443/9444–9452
 - `cloudflared` runs on host network, can reach every container subnet
 - Origin certificates for these zones (if any) live on the Caddy side; SSL/TLS mode flip from `Full` → `Full (strict)` requires confirming origin cert presence first
 
-**Known open routing issue (still pending):** Forgejo HTTPS Git push via `git.southbrookcabinetry.space/git/<org>/<repo>.git` returns 307 that adds an extra `/git/` segment → 404. Root cause is in the Caddy/Cloudflare layer, not Forgejo. Worth flagging on every audit of `southbrookcabinetry.space`.
+**Known open routing issue — ROOT CAUSE identified 2026-06-16:** `git.southbrookcabinetry.space` tunnel ingress points to `http://192.168.68.108:9080` — but the QNAP is at `192.168.68.76` now. Tunnel can't reach the origin → 307/404. Fix: change the tunnel ingress to `http://localhost:9080` (mirror the working `git.odooiq.com` route).
+
+**`hermes.odooiq.com` is fully public** — no Zero Trust Access app configured. If `/api/health` or chat surface should be private, add an Access app gated by the email-OTP IdP.
 
 **DNS records that should be checked first in any audit** (most likely to drift):
-- `hermes.odooiq.com` (added recently)
-- `git.southbrookcabinetry.space` (routing flake)
+- `git.southbrookcabinetry.space` — known stale ingress IP
+- `hermes.odooiq.com` — added recently, no Access app
+- Apex A records on tribancs.com / quattroporte.store / odooai.ca / porterly.ca → Netfirms `66.96.160.138` (production sites; DO NOT change)
 - Any record proxied=DNS-only pointing at the QNAP LAN IP — that bypasses Cloudflare entirely
 
 ## Source inspiration

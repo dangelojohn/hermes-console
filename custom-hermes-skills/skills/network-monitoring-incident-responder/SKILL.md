@@ -111,6 +111,14 @@ Live evidence in `evidence/qnap-lan-scan-2026-06-16.md` and `evidence/qnap-netwo
 **Origin-side triage anchors:**
 - `alfacore-caddy` multi-attached to 12 networks; if a single Caddy snippet is wrong, that hostname 502s but others stay green
 - `hermes-api` uses debounced LLM health (today's 1588b21) — a single 429 in the rolling window does NOT flip the pill
+- **OpenAI insufficient_quota** maps to 429 + `code:insufficient_quota` not auth-fail — verify this path today via the debouncing patch (proven 2026-06-16 production test)
+
+**Known active routing issue:** `git.southbrookcabinetry.space` tunnel ingress is `http://192.168.68.108:9080` (stale — QNAP at .76). Affects HTTPS Git push only. Workaround: push to GitHub mirror. Permanent fix is a Cloudflare-dashboard route edit.
+
+**Cloudflare account context for incident severity calls:**
+- Account ID `2ed2c7f49d4d55d86af59d301e4c39b9`, tunnel `qnap-odooiq` (single replica)
+- All 7 zones on Free plan — no rate-limit rules available; only WAF custom rule is the "Allow scripted API + deploy clients" SKIP on `southbrookcabinetry.space`
+- 24h traffic concentrated in `odooiq.com` (8.3k requests) and `southbrookcabinetry.space` (5.1k) — those two zones drive most outage-impact
 
 ## Source inspiration
 

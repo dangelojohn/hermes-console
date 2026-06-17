@@ -142,6 +142,15 @@ Live evidence in `evidence/qnap-lan-scan-2026-06-16.md` and `evidence/qnap-netwo
 - Caddyfile snippet: `/share/CACHEDEV3_DATA/Container/odoo/config/Caddyfile`
 - OC200 controller config: operator-driven Settings → Backup & Restore export
 - Cloudflare zone JSON: GET the ruleset + DNS via API before any apply
+- Cloudflare tunnel ingress: GET `/accounts/{aid}/cfd_tunnel/{tid}/configurations` for tunnel `dcc94796-f7b7-45ab-b932-9b746d377c01` before any ingress edit
+
+**Cloudflare reference IDs for the Change Plan:**
+- Account ID `2ed2c7f49d4d55d86af59d301e4c39b9`
+- Tunnel ID `dcc94796-f7b7-45ab-b932-9b746d377c01` (14 routes)
+- Zone IDs: `odooiq.com=0a362c2…` `southbrookcabinetry.space=d23781a…` `tribancs.com=c8040d9…` `sapienzium.com=079d0e0…` `quattroporte.store=9aed225…` `odooai.ca=2c600aa…` `porterly.ca=ebb992b…`
+- Access policy IDs: "Allow dangelo.john" `3e63d3f…`, "Owner only" `a4f2b51…` & `3cd567a…`, "QNAP WebDAV Access" `f8e52ce…`, "QNAP WebDAV Service Token" `cc4a0af…`
+
+**Tunnel-ingress edits** are NOT low-risk reversible — they impact every request to that hostname. Always classify as at least medium-risk service-impacting.
 
 ## Source inspiration
 
