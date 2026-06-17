@@ -30,6 +30,7 @@ services:
       - .env
     volumes:
       - hermes-data:/data
+      - ./custom-hermes-skills:/app/custom-hermes-skills:ro
     networks:
       hermes-net:
         aliases:
@@ -73,12 +74,19 @@ services:
       hermes-net:
         aliases:
           - hermes-whatsapp
+      hermes-outbound: {}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8901/health"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 120s
+    # Chrome under puppeteer is memory-hungry. Without a cap the QNAP OOM
+    # killer can SIGKILL the container (exit 137) once the rest of the host
+    # gets close to memory pressure. 1.5GB is generous for one WhatsApp Web
+    # session; reserve 256MB to keep Chrome from being killed under contention.
+    mem_limit: 1536m
+    mem_reservation: 256m
     logging:
       driver: json-file
       options:
@@ -127,6 +135,13 @@ networks:
     name: hermes-net
     driver: bridge
     internal: true
+  # Dedicated outbound network for hermes-whatsapp. hermes-net is internal
+  # by design — east-west service traffic only. hermes-whatsapp needs to
+  # reach web.whatsapp.com to drive the WhatsApp Web session, so it gets
+  # this second network for outbound. Nothing else attaches to it.
+  hermes-outbound:
+    name: hermes-outbound
+    driver: bridge
   southbrook-net:
     name: southbrook-net
     external: true
