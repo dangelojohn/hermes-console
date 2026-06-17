@@ -81,8 +81,12 @@ class UpstreamMCPClient:
                        "Accept": "application/json, text/event-stream"}
             if self._cfg.headers:
                 headers.update(self._cfg.headers)
+            # Deliberately NOT using base_url here: httpx appends a trailing
+            # slash to base_url when the request path is empty, and many MCP
+            # servers (including Cloudflare's docs.mcp.cloudflare.com/mcp)
+            # return 404 for the slash-suffixed form. We hold the full URL
+            # and pass it verbatim in each POST.
             self._client = httpx.AsyncClient(
-                base_url=self._cfg.url,
                 timeout=httpx.Timeout(30.0, connect=10.0),
                 headers=headers,
             )
@@ -120,7 +124,7 @@ class UpstreamMCPClient:
                 "method": method,
                 "params": params,
             }
-            resp = await self._client.post("", json=body)
+            resp = await self._client.post(self._cfg.url, json=body)
             if resp.status_code >= 400:
                 raise RuntimeError(
                     f"upstream {self._cfg.name} {method} "
