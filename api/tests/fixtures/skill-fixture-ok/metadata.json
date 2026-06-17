@@ -1,0 +1,12 @@
+{
+  "name": "skill-fixture-ok",
+  "version": "0.0.1",
+  "category": "meta",
+  "summary": "A read-only fixture skill for tests.",
+  "needs": ["N-99"],
+  "jtbds": ["J-99"],
+  "default_mode": "read-only",
+  "destructive_actions": false,
+  "requires_confirmation": false,
+  "outputs": ["custom-hermes-skills/runs/skill-fixture-ok/<ts>.md"]
+}

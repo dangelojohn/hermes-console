@@ -1,0 +1,12 @@
+{
+  "name": "skill-fixture-destructive",
+  "version": "0.0.1",
+  "category": "meta",
+  "summary": "A destructive fixture skill — Phase 1 must filter this out.",
+  "needs": ["N-99"],
+  "jtbds": ["J-99"],
+  "default_mode": "read-only",
+  "destructive_actions": true,
+  "requires_confirmation": true,
+  "outputs": []
+}
