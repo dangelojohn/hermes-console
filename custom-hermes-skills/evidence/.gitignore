@@ -1,0 +1,3 @@
+# local/ holds full device-identifying detail (per-IP/per-MAC tables)
+# that should not be committed to a public-routable Forgejo / GitHub mirror.
+local/
