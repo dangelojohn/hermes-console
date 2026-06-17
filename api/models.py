@@ -114,6 +114,22 @@ class Settings(BaseSettings):
     home_assistant_context_entities: str = Field(
         default="", alias="HOME_ASSISTANT_CONTEXT_ENTITIES"
     )
+    # Comma-separated allowlist of "domain.service" strings that the
+    # hermes_ha_call_service MCP tool is permitted to invoke. Empty (default)
+    # = ALL service calls are denied. Set e.g.
+    #   climate.set_temperature,light.turn_on,light.turn_off,cover.open_cover
+    home_assistant_allowed_services: str = Field(
+        default="", alias="HOME_ASSISTANT_ALLOWED_SERVICES"
+    )
+
+    # --- Reolink cameras (direct LAN API, no cloud) ---
+    # JSON list of cameras Hermes can talk to.
+    # Format: [{"name":"foyer","ip":"192.168.68.50","user":"admin","password":"…","port":80}]
+    # Keep this on the QNAP only — never commit a populated value.
+    # Hermes never streams video; only read metadata + motion state + snapshot URL.
+    reolink_cameras_json: str = Field(
+        default="[]", alias="REOLINK_CAMERAS_JSON"
+    )
 
     # --- Cloudflare API (read-only via hermes_cloudflare_* MCP tools) ---
     # Generate at https://dash.cloudflare.com/profile/api-tokens with the
@@ -187,10 +203,11 @@ class Settings(BaseSettings):
     )
     # Free-form region hint passed verbatim into the prompt — Gemini's
     # grounded search uses it to bias results. Defaults: Southbrook's
-    # actual sales footprint (Hamilton + GTA + adjacent Ontario + the
-    # cross-border Western NY dealer market the case study references).
+    # actual sales footprint (Hamilton + GTA + adjacent Ontario). The
+    # system prompt also enforces "Canadian companies only" as a hard
+    # rule — geo_hint is the bias, the prompt is the gate.
     hermes_lead_prospector_geo_hint: str = Field(
-        default="Ontario, Canada (Hamilton, Toronto, GTA, surrounding 905/289/416/647/437/519/705) and adjacent Western New York (Buffalo, Niagara, Rochester)",
+        default="Ontario, Canada — PRIMARY focus on Hamilton, Toronto, the GTA, and the surrounding 905/289/416/647/437/519/705 area codes. Other Canadian provinces (Quebec, Manitoba, Alberta, BC, Atlantic) are acceptable secondary. NO LEADS from the United States or any country outside Canada — reject them.",
         alias="HERMES_LEAD_PROSPECTOR_GEO_HINT",
     )
     # Comma-separated. Default covers all four lead types from the design.

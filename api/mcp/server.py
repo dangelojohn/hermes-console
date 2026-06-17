@@ -179,6 +179,66 @@ async def run_stdio(db_path: str, key: str) -> int:
         _set_res_ctx(store=store, skills_root=skills_root)
         _set_prompts_ctx(skills_root=skills_root)
 
+        # ---- Phyn Smart Water Assistant (via HA bridge) ----
+        try:
+            from api.mcp.tools.phyn import (
+                register as _reg_phyn, set_phyn_context as _set_phyn,
+            )
+            _reg_phyn()
+            phyn_hint = _os.environ.get("HERMES_PHYN_NAME_HINT", "phyn")
+            _set_phyn(
+                bridge=(bridges.get("home_assistant") if "bridges" in dir() else None),
+                name_hint=phyn_hint,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("mcp: phyn init skipped (%s)", exc)
+
+        # ---- Reolink camera tools (direct LAN API) ----
+        try:
+            from api.mcp.tools.reolink import (
+                register as _reg_re, set_cameras as _set_cams,
+                build_cameras_from_env as _build_cams,
+            )
+            _reg_re()
+            cams_raw = _os.environ.get("REOLINK_CAMERAS_JSON", "[]")
+            cams = _build_cams(cams_raw)
+            for c in cams.values():
+                try:
+                    await c.startup()
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("reolink %s startup failed: %s", c.name, exc)
+            _set_cams(cams)
+            logger.info("mcp: reolink cameras configured: %d", len(cams))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("mcp: reolink init skipped (%s)", exc)
+
+        # ---- Home Assistant tools (read context, list entities, call service) ----
+        try:
+            from api.mcp.tools.home_assistant import (
+                register as _reg_ha, set_ha_context as _set_ha_ctx,
+            )
+            _reg_ha()
+            ha_bridge = bridges.get("home_assistant") if "bridges" in dir() else None
+            allowed_services_raw = _os.environ.get(
+                "HOME_ASSISTANT_ALLOWED_SERVICES", "",
+            )
+            allowed_services = [
+                s.strip() for s in allowed_services_raw.split(",") if s.strip()
+            ]
+            _set_ha_ctx(bridge=ha_bridge, allowed_services=allowed_services)
+            if ha_bridge:
+                logger.info(
+                    "mcp: HA tools ready; %d allowed services",
+                    len(allowed_services),
+                )
+            else:
+                logger.info(
+                    "mcp: HA bridge not configured — hermes_ha_* tools will "
+                    "return 'not configured'"
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("mcp: HA tools init skipped (%s)", exc)
+
         # ---- Phase 2: write tools (file recommendation, trigger loop, apply) ----
         try:
             from api.mcp.tools.write import (

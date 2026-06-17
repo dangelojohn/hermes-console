@@ -204,3 +204,95 @@ class HomeAssistantBridge:
                 "attributes": data.get("attributes") or {},
             }
         return out
+
+    async def list_entities(
+        self, *, domain_filter: Optional[str] = None,
+        name_filter: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """List every entity HA exposes (with optional domain/name filter).
+
+        Useful for entity-discovery: agents call this to find out what's
+        actually in HA before deciding which entity_ids to ask about.
+        Returns a slim shape — entity_id, state, last_changed, friendly_name
+        from attributes. NOT subject to the allowlist (it's a directory
+        listing, not state-of-allowlisted-entity); the allowlist still
+        applies to per-entity reads via fetch_context.
+        """
+        client = await self._ensure()
+        try:
+            resp = await client.get("/api/states", timeout=DEFAULT_TIMEOUT)
+        except httpx.RequestError as exc:
+            return [{"error": f"transport {exc.__class__.__name__}"}]
+        if resp.status_code != 200:
+            return [{"error": f"http {resp.status_code}"}]
+        try:
+            data = resp.json()
+        except ValueError:
+            return [{"error": "non-json"}]
+        out: List[Dict[str, Any]] = []
+        for ent in data:
+            eid = ent.get("entity_id") or ""
+            if domain_filter and not eid.startswith(domain_filter + "."):
+                continue
+            attrs = ent.get("attributes") or {}
+            friendly = attrs.get("friendly_name") or ""
+            if name_filter:
+                nf = name_filter.lower()
+                if nf not in eid.lower() and nf not in friendly.lower():
+                    continue
+            out.append({
+                "entity_id": eid,
+                "state": ent.get("state"),
+                "friendly_name": friendly,
+                "last_changed": ent.get("last_changed"),
+                "device_class": attrs.get("device_class"),
+                "unit_of_measurement": attrs.get("unit_of_measurement"),
+            })
+        return out
+
+    async def call_service(
+        self, *, domain: str, service: str, data: Optional[Dict[str, Any]] = None,
+        allowed_services: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Call an HA service (e.g. climate.set_temperature, light.turn_on).
+
+        Gated by the ``allowed_services`` allowlist — a list of
+        ``"<domain>.<service>"`` strings. The empty list means EVERY service
+        is forbidden (the safe default); the operator opts in by setting
+        ``HOME_ASSISTANT_ALLOWED_SERVICES`` in .env. The Hermes MCP tool
+        layer reads that env var and passes the parsed list here.
+        """
+        full = f"{domain}.{service}"
+        if not allowed_services:
+            raise BridgeRejected(
+                "home_assistant: no services allowed; set "
+                "HOME_ASSISTANT_ALLOWED_SERVICES in .env"
+            )
+        if full not in allowed_services and full != "*":
+            raise BridgeRejected(
+                f"home_assistant: '{full}' not in HOME_ASSISTANT_ALLOWED_SERVICES "
+                f"(allowed: {allowed_services})"
+            )
+        client = await self._ensure()
+        path = f"/api/services/{domain}/{service}"
+        try:
+            resp = await client.post(path, json=data or {})
+        except httpx.RequestError as exc:
+            raise BridgeUnreachable(
+                f"home_assistant call_service transport ({exc.__class__.__name__})"
+            ) from exc
+        if resp.status_code >= 500:
+            raise BridgeUnreachable(
+                f"home_assistant call_service 5xx ({resp.status_code})"
+            )
+        if resp.status_code == 401:
+            raise BridgeRejected("home_assistant: 401 — long-lived token rejected")
+        if resp.status_code >= 400:
+            raise BridgeRejected(
+                f"home_assistant call_service {resp.status_code}: "
+                f"{resp.text[:200]}"
+            )
+        try:
+            return {"ok": True, "service": full, "result": resp.json()}
+        except ValueError:
+            return {"ok": True, "service": full, "result_raw": resp.text[:200]}
