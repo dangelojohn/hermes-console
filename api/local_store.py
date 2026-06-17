@@ -105,6 +105,29 @@ CREATE TABLE IF NOT EXISTS agent_runs (
 );
 CREATE INDEX IF NOT EXISTS ix_agent_runs_name_started
     ON agent_runs(agent_name, started_at);
+
+CREATE TABLE IF NOT EXISTS mcp_clients (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    key_hash    TEXT NOT NULL UNIQUE,
+    created_at  TEXT NOT NULL,
+    revoked_at  TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_mcp_clients_key_hash_active
+    ON mcp_clients(key_hash) WHERE revoked_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS mcp_calls (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id           INTEGER NOT NULL REFERENCES mcp_clients(id),
+    tool_name           TEXT NOT NULL,
+    args_redacted_json  TEXT,
+    outcome             TEXT NOT NULL,
+    error_text          TEXT,
+    started_at          TEXT NOT NULL,
+    duration_ms         INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_mcp_calls_started_at
+    ON mcp_calls(started_at DESC);
 """
 
 
@@ -723,5 +746,145 @@ class LocalStore:
                     "last_run_status": row["status"] if row else None,
                     "recommendation_count": int(total_row["n"]) if total_row else 0,
                 }
+
+        return await asyncio.to_thread(_select)
+
+    # ------------------------------------------------------------------
+    # MCP clients (per-agent API keys)
+    # ------------------------------------------------------------------
+
+    async def create_mcp_client(self, *, name: str, key_hash: str) -> int:
+        now = _utcnow_iso()
+
+        def _insert() -> int:
+            with self._connect() as conn:
+                cur = conn.execute(
+                    "INSERT INTO mcp_clients (name, key_hash, created_at) "
+                    "VALUES (?, ?, ?)",
+                    (name, key_hash, now),
+                )
+                return int(cur.lastrowid)
+
+        async with self._write_lock:
+            return await asyncio.to_thread(_insert)
+
+    async def get_mcp_client(self, client_id: int) -> Optional[Dict[str, Any]]:
+        def _select() -> Optional[Dict[str, Any]]:
+            with self._connect() as conn:
+                row = conn.execute(
+                    "SELECT id, name, key_hash, created_at, revoked_at "
+                    "FROM mcp_clients WHERE id = ?",
+                    (client_id,),
+                ).fetchone()
+                return dict(row) if row else None
+
+        return await asyncio.to_thread(_select)
+
+    async def list_mcp_clients(
+        self, *, active_only: bool = False
+    ) -> List[Dict[str, Any]]:
+        def _select() -> List[Dict[str, Any]]:
+            with self._connect() as conn:
+                if active_only:
+                    rows = conn.execute(
+                        "SELECT id, name, key_hash, created_at, revoked_at "
+                        "FROM mcp_clients WHERE revoked_at IS NULL "
+                        "ORDER BY id"
+                    ).fetchall()
+                else:
+                    rows = conn.execute(
+                        "SELECT id, name, key_hash, created_at, revoked_at "
+                        "FROM mcp_clients ORDER BY id"
+                    ).fetchall()
+                return [dict(r) for r in rows]
+
+        return await asyncio.to_thread(_select)
+
+    async def find_mcp_client_by_key_hash(
+        self, key_hash: str
+    ) -> Optional[Dict[str, Any]]:
+        def _select() -> Optional[Dict[str, Any]]:
+            with self._connect() as conn:
+                row = conn.execute(
+                    "SELECT id, name, key_hash, created_at, revoked_at "
+                    "FROM mcp_clients "
+                    "WHERE key_hash = ? AND revoked_at IS NULL",
+                    (key_hash,),
+                ).fetchone()
+                return dict(row) if row else None
+
+        return await asyncio.to_thread(_select)
+
+    async def revoke_mcp_client(self, client_id: int) -> bool:
+        now = _utcnow_iso()
+
+        def _update() -> bool:
+            with self._connect() as conn:
+                cur = conn.execute(
+                    "UPDATE mcp_clients SET revoked_at = ? "
+                    "WHERE id = ? AND revoked_at IS NULL",
+                    (now, client_id),
+                )
+                return cur.rowcount > 0
+
+        async with self._write_lock:
+            return await asyncio.to_thread(_update)
+
+    # ------------------------------------------------------------------
+    # MCP calls (audit log)
+    # ------------------------------------------------------------------
+
+    async def log_mcp_call(
+        self,
+        *,
+        client_id: int,
+        tool_name: str,
+        args_redacted: Dict[str, Any],
+        outcome: str,
+        error_text: Optional[str],
+        duration_ms: int,
+    ) -> int:
+        now = _utcnow_iso()
+        args_json = json.dumps(args_redacted, default=str, sort_keys=True)
+
+        def _insert() -> int:
+            with self._connect() as conn:
+                cur = conn.execute(
+                    "INSERT INTO mcp_calls "
+                    "(client_id, tool_name, args_redacted_json, outcome, "
+                    " error_text, started_at, duration_ms) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        client_id,
+                        tool_name,
+                        args_json,
+                        outcome,
+                        error_text,
+                        now,
+                        duration_ms,
+                    ),
+                )
+                return int(cur.lastrowid)
+
+        async with self._write_lock:
+            return await asyncio.to_thread(_insert)
+
+    async def list_mcp_calls(
+        self, *, since_hours: int = 24
+    ) -> List[Dict[str, Any]]:
+        cutoff = (
+            datetime.now(tz=timezone.utc) - timedelta(hours=since_hours)
+        ).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        def _select() -> List[Dict[str, Any]]:
+            with self._connect() as conn:
+                rows = conn.execute(
+                    "SELECT id, client_id, tool_name, args_redacted_json, "
+                    "outcome, error_text, started_at, duration_ms "
+                    "FROM mcp_calls WHERE started_at >= ? "
+                    "ORDER BY started_at DESC",
+                    (cutoff,),
+                ).fetchall()
+                return [dict(r) for r in rows]
 
         return await asyncio.to_thread(_select)
