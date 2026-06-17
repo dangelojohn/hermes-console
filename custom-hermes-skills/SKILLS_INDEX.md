@@ -1,6 +1,6 @@
 # Skills Index
 
-_Auto-generated from `skills/` by `scripts/build_index.py`. 42 skills._
+_Auto-generated from `skills/` by `scripts/build_index.py`. 43 skills._
 
 | Skill | Category | Summary | Needs | JTBDs |
 |---|---|---|---|---|
@@ -40,6 +40,7 @@ _Auto-generated from `skills/` by `scripts/build_index.py`. 42 skills._
 | `wifi-ssid-vlan-planner` | networking-cloudflare-web-services | Pure-planning Wi-Fi / SSID / VLAN / DHCP / firewall design with default-deny inter-VLAN matrix, rollout, and rollback checklists. | N-07, N-09 | J-05 |
 | `documentation-synthesizer` | documentation | Extract current-state / open-items / runbook content from sprawling source documents, with mandatory line-level citations. | N-14, N-18 | J-11 |
 | `automation-runbook-builder` | meta | Convert a real-execution chat-transcript procedure into a versioned, dry-runnable runbook with rollback and validation. | N-18 | J-11 |
+| `hermes-mcp-service` | meta | Operator-facing reference for the Hermes MCP service: setup, troubleshooting, audit, key rotation. | N-16, N-18 | J-09, J-10, J-12 |
 | `hermes-skill-maintainer` | meta | Rebuild the library index, detect duplicates and stale skills, run format-compliance checks, and report Need/JTBD coverage gaps. | N-16 | J-12 |
 | `jtbd-skill-mapper` | meta | Cross-reference JTBDs against built skills; produce coverage matrix or ranked recommendation for the next skill to build. | N-18 | J-11, J-12 |
 | `repo-needs-assessor` | meta | Top-level scan that produces or updates a workspace's NEEDS_ASSESSMENT, JTBD_MAP, and per-domain maps. | N-14, N-18 | J-11 |
@@ -111,9 +112,10 @@ _Auto-generated from `skills/` by `scripts/build_index.py`. 42 skills._
 
 - `documentation-synthesizer` — Extract current-state / open-items / runbook content from sprawling source documents, with mandatory line-level citations.
 
-### meta (7)
+### meta (8)
 
 - `automation-runbook-builder` — Convert a real-execution chat-transcript procedure into a versioned, dry-runnable runbook with rollback and validation.
+- `hermes-mcp-service` — Operator-facing reference for the Hermes MCP service: setup, troubleshooting, audit, key rotation.
 - `hermes-skill-maintainer` — Rebuild the library index, detect duplicates and stale skills, run format-compliance checks, and report Need/JTBD coverage gaps.
 - `jtbd-skill-mapper` — Cross-reference JTBDs against built skills; produce coverage matrix or ranked recommendation for the next skill to build.
 - `repo-needs-assessor` — Top-level scan that produces or updates a workspace's NEEDS_ASSESSMENT, JTBD_MAP, and per-domain maps.

@@ -1,0 +1,15 @@
+{
+  "name": "hermes-mcp-service",
+  "version": "0.1.0",
+  "category": "meta",
+  "summary": "Operator-facing reference for the Hermes MCP service: setup, troubleshooting, audit, key rotation.",
+  "needs": ["N-16", "N-18"],
+  "jtbds": ["J-09", "J-10", "J-12"],
+  "default_mode": "read-only",
+  "destructive_actions": false,
+  "requires_confirmation": false,
+  "learning_enabled": true,
+  "outputs": [
+    "custom-hermes-skills/runs/hermes-mcp-service/<ts>.md"
+  ]
+}
