@@ -236,11 +236,135 @@ class DailyDigestLoop:
         return items
 
 
+class BackupHealthLoop:
+    """Read the nightly-backup status file and emit a recommendation when stale or failed.
+
+    Deterministic: no LLM call. The backup sidecar (backup/backup.sh) writes
+    a JSON file with ``outcome`` and ``ts``. This loop reads that file every
+    ``interval_seconds``, classifies, and creates at most ONE recommendation
+    per stale/failed condition (idempotent: if the last reco for this source
+    is still 'ready' or 'approved', skip).
+    """
+
+    name = "backup_health"
+
+    def __init__(
+        self,
+        *,
+        interval_seconds: int,
+        status_path: str,
+        max_age_hours: int,
+    ) -> None:
+        self.interval_seconds = interval_seconds
+        self.status_path = status_path
+        self.max_age_hours = max_age_hours
+
+    async def run(self, env: AgentEnv) -> List[Dict[str, Any]]:
+        from pathlib import Path
+
+        path = Path(self.status_path)
+        title: Optional[str] = None
+        summary: Optional[str] = None
+        priority = "normal"
+        rationale: Optional[str] = None
+
+        if not path.exists():
+            title = "Backup status file missing"
+            summary = (
+                f"The backup status file at {self.status_path} doesn't exist. "
+                "The nightly backup sidecar has never run successfully, OR the "
+                "volume mount that exposes /share/CACHEDEV3_DATA/OdooIQ-Backups/"
+                "hermes/ into this API container isn't wired."
+            )
+            rationale = (
+                "Setup gap. See backup/README.md step 5 (compose snippet) and "
+                "step 7 (cron entry)."
+            )
+            priority = "high"
+        else:
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                title = "Backup status file unreadable"
+                summary = (
+                    f"Could not parse {self.status_path}: "
+                    f"{exc.__class__.__name__}: {exc}"
+                )
+                priority = "high"
+            else:
+                outcome = (data.get("outcome") or "").lower()
+                ts_raw = data.get("ts") or ""
+                try:
+                    last = datetime.fromisoformat(ts_raw.replace("Z", "+00:00"))
+                except ValueError:
+                    last = None
+                age_hours: Optional[float] = None
+                if last is not None:
+                    if last.tzinfo is None:
+                        last = last.replace(tzinfo=timezone.utc)
+                    age_hours = (_utcnow() - last).total_seconds() / 3600.0
+
+                if outcome != "success":
+                    detail = data.get("detail") or "(no detail in status file)"
+                    title = f"Nightly backup last run failed ({outcome or 'unknown'})"
+                    summary = (
+                        f"Last attempt at {ts_raw} reported outcome="
+                        f"{outcome or 'unknown'}. Detail: {detail}"
+                    )
+                    priority = "blocker"
+                elif age_hours is not None and age_hours > self.max_age_hours:
+                    title = f"Nightly backup stale ({age_hours:.0f}h old)"
+                    summary = (
+                        f"Last successful backup completed {age_hours:.0f}h "
+                        f"ago at {ts_raw}; threshold is "
+                        f"{self.max_age_hours}h. Cron may have missed a run "
+                        "OR the sidecar restarted mid-night."
+                    )
+                    priority = "high"
+
+        if title is None:
+            return []
+
+        # Idempotency: avoid spamming. If the most recent reco from this
+        # source is still pending review (ready/approved), skip a new one.
+        recent = await env.store.recent_recommendations_for_digest(hours=48)
+        for r in recent:
+            if r.get("source") == self.name and r.get("state") in ("ready", "approved"):
+                env.logger.info(
+                    "backup_health: existing pending reco id=%s — skipping new one",
+                    r.get("id"),
+                )
+                return []
+
+        rec_vals = {
+            "title": title,
+            "summary": summary,
+            "rationale": rationale,
+            "proposed_action": (
+                "Check `/share/CACHEDEV3_DATA/OdooIQ-Backups/hermes/cron.log` on "
+                "the QNAP for the latest run's stderr; consult "
+                "`custom-hermes-skills/skills/qnap-backup-snapshot-checker/runs/"
+                "hermes-nightly-backup-runbook.md` for the rollback path."
+            ),
+            "priority": priority,
+            "source": self.name,
+            "tenant_hint": None,
+            "payload": {"status_path": self.status_path},
+        }
+        created = await env.store.create_recommendation(rec_vals)
+        return [created]
+
+
 _BUILT_IN_LOOPS: Dict[str, Callable[["Any"], AgentLoop]] = {
     "platform_health": lambda settings: PlatformHealthLoop(
         interval_seconds=settings.hermes_platform_health_interval
     ),
     "daily_digest": lambda settings: DailyDigestLoop(),
+    "backup_health": lambda settings: BackupHealthLoop(
+        interval_seconds=settings.hermes_backup_health_interval,
+        status_path=settings.hermes_backup_status_path,
+        max_age_hours=settings.hermes_backup_max_age_hours,
+    ),
 }
 
 

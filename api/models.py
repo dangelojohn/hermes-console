@@ -133,6 +133,21 @@ class Settings(BaseSettings):
         default=900, alias="HERMES_PLATFORM_HEALTH_INTERVAL"
     )
 
+    # Backup-health loop: reads the nightly-backup status JSON and emits a
+    # recommendation when the last run failed or is older than the
+    # max-age threshold. Defaults to a 1-hour poll cadence; status file
+    # path matches the mount documented in backup/README.md.
+    hermes_backup_health_interval: int = Field(
+        default=3600, alias="HERMES_BACKUP_HEALTH_INTERVAL"
+    )
+    hermes_backup_status_path: str = Field(
+        default="/data/backup-status/last-run.json",
+        alias="HERMES_BACKUP_STATUS_PATH",
+    )
+    hermes_backup_max_age_hours: int = Field(
+        default=26, alias="HERMES_BACKUP_MAX_AGE_HOURS"
+    )
+
     cors_allow_origins: str = Field(
         default="https://hermes.odooiq.com",
         alias="HERMES_CORS_ALLOW_ORIGINS",

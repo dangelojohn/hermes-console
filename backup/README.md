@@ -129,7 +129,34 @@ If you can list the contents, the chain works.
 ## Failure handling
 
 - Any error writes a non-zero exit + a `"outcome": "error"` JSON to `/output/last-run.json` (= `/share/CACHEDEV3_DATA/OdooIQ-Backups/hermes/last-run.json` on the host).
-- A monitoring agent loop in Hermes Console can ingest this file periodically and surface a recommendation if the last run is over 26 hours old or has `outcome != success`.
+- The Hermes Console **`backup_health`** agent loop ingests this file every hour. If `outcome != success` it files a `blocker`-priority recommendation; if the last successful run is older than `HERMES_BACKUP_MAX_AGE_HOURS` (default 26) it files a `high`-priority recommendation. The loop is idempotent — it skips a new recommendation if one from this source is already `ready` or `approved`.
+
+### Wiring the loop into hermes-api
+
+Append this volume mount to the `hermes-api` service block in `~/hermes-console/docker-compose.yml`:
+
+```yaml
+    volumes:
+      - hermes-data:/data
+      - /share/CACHEDEV3_DATA/OdooIQ-Backups/hermes:/data/backup-status:ro   # <-- add this
+```
+
+Then in `.env`:
+
+```env
+HERMES_AGENT_LOOPS=platform_health,backup_health
+HERMES_BACKUP_HEALTH_INTERVAL=3600
+HERMES_BACKUP_STATUS_PATH=/data/backup-status/last-run.json
+HERMES_BACKUP_MAX_AGE_HOURS=26
+```
+
+Force-recreate hermes-api once (env_file changes require `--force-recreate`, not `restart`):
+
+```bash
+ssh admin@ssh.odooiq.com 'cd /share/CACHEDEV3_DATA/Container/hermes-console && DOCKER_HOST=unix:///var/run/system-docker.sock /share/CACHEDEV3_DATA/.qpkg/container-station/bin/docker compose up -d --force-recreate hermes-api'
+```
+
+Verify `GET /api/agents` lists `backup_health` alongside `platform_health`. The first time the loop fires after a run that has not yet happened, you'll see a `Backup status file missing` recommendation in the queue — exactly what we want until the first nightly run lands.
 
 ## Things that are out of scope (deliberately)
 
