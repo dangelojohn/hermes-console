@@ -31,6 +31,7 @@ services:
     volumes:
       - hermes-data:/data
       - ./custom-hermes-skills:/app/custom-hermes-skills:ro
+      - ./hub:/app/hub:ro
     networks:
       hermes-net:
         aliases:

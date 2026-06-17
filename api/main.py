@@ -27,8 +27,10 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Dict, List, Mapping, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, status
+from fastapi import Body, Depends, FastAPI, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, Response
+from fastapi.staticfiles import StaticFiles
 
 from .agent_loops import (
     AgentEnv,
@@ -38,6 +40,7 @@ from .agent_loops import (
     execute_loop,
 )
 from .auth import Principal, require_auth
+from .hub_manifest import HubStore
 from .llm import (
     GeminiGroundedClient,
     LLMError,
@@ -161,6 +164,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     await queue.startup()
 
+    hub = HubStore(path=settings.hermes_hub_manifest_path)
+    await hub.startup()
+
     # Build the standard loops (platform_health / daily_digest / backup_health).
     loops = build_enabled_loops(settings)
 
@@ -207,6 +213,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.whatsapp = whatsapp
     app.state.queue = queue
     app.state.agent_runner = runner
+    app.state.hub = hub
     app.state.tenant_test_results = {}  # type: Dict[str, Dict[str, Any]]
 
     logger.info("hermes-console-api startup complete; version=%s", API_VERSION)
@@ -258,7 +265,7 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=cors_settings.cors_origins(),
         allow_credentials=False,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["Authorization", "Content-Type", "X-Api-Key"],
     )
 
@@ -952,4 +959,76 @@ def _register_routes(app: FastAPI) -> None:
         )
 
 
-app = create_app()
+def _hub(request: Request) -> HubStore:
+    return request.app.state.hub
+
+
+def _register_hub_routes(app: FastAPI) -> None:
+    """Hub manifest CRUD + static dashboard served from the same container.
+
+    Reads are open (intra-net + Cloudflare Access gate the URL). Writes go
+    through ``require_auth`` so an unauthenticated browser tab can't reorder
+    the dashboard, even though most real Hermes-driven edits happen via the
+    MCP tools.
+    """
+    @app.get("/api/hub/manifest")
+    async def read_manifest(request: Request) -> Dict[str, Any]:
+        return await _hub(request).read()
+
+    @app.put("/api/hub/manifest")
+    async def replace_manifest(
+        request: Request,
+        manifest: Dict[str, Any] = Body(...),
+        _: Principal = Depends(require_auth),
+    ) -> Dict[str, Any]:
+        try:
+            return await _hub(request).replace(manifest, who="api")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/hub/links")
+    async def add_link(
+        request: Request,
+        payload: Dict[str, Any] = Body(...),
+        _: Principal = Depends(require_auth),
+    ) -> Dict[str, Any]:
+        required = ("category_id", "name", "url")
+        for k in required:
+            if not payload.get(k):
+                raise HTTPException(status_code=400, detail=f"missing field: {k}")
+        return await _hub(request).add_link(
+            category_id=payload["category_id"],
+            name=payload["name"], url=payload["url"],
+            description=payload.get("description", ""),
+            health_url=payload.get("health_url"),
+            tags=payload.get("tags") or [],
+            icon=payload.get("icon"), who="api",
+        )
+
+    @app.delete("/api/hub/links/{link_id}")
+    async def delete_link(
+        request: Request, link_id: str,
+        _: Principal = Depends(require_auth),
+    ) -> Dict[str, Any]:
+        ok = await _hub(request).remove_link(link_id=link_id, who="api")
+        if not ok:
+            raise HTTPException(status_code=404, detail="link not found")
+        return {"ok": True, "removed_id": link_id}
+
+    @app.get("/hub/", include_in_schema=False)
+    @app.get("/hub", include_in_schema=False)
+    async def hub_index() -> FileResponse:
+        path = "/app/hub/index.html"
+        return FileResponse(path, headers={"Cache-Control": "no-cache"})
+
+
+_register_hub_routes_callable = _register_hub_routes
+
+
+def create_app_with_hub() -> FastAPI:
+    a = create_app()
+    _register_hub_routes_callable(a)
+    return a
+
+
+app = create_app_with_hub()

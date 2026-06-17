@@ -212,6 +212,23 @@ async def run_stdio(db_path: str, key: str) -> int:
         except Exception as exc:  # noqa: BLE001
             logger.warning("mcp: reolink init skipped (%s)", exc)
 
+        # ---- Hub manifest tools (Hermes is the dashboard's webmaster) ----
+        try:
+            from api.mcp.tools.hub import (
+                register as _reg_hub, set_hub_store as _set_hub_store,
+            )
+            from api.hub_manifest import HubStore
+            _reg_hub()
+            hub_path = _os.environ.get(
+                "HERMES_HUB_MANIFEST_PATH", "/data/hub-manifest.json",
+            )
+            hub_store = HubStore(path=hub_path)
+            await hub_store.startup()
+            _set_hub_store(hub_store)
+            logger.info("mcp: hub store ready at %s", hub_path)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("mcp: hub tools init skipped (%s)", exc)
+
         # ---- Home Assistant tools (read context, list entities, call service) ----
         try:
             from api.mcp.tools.home_assistant import (

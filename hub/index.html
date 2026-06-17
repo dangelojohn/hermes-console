@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hermes Hub — Network Command Centre</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='80' font-size='80'%3E%F0%9F%A7%AD%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg-0: #07070d;
+    --bg-1: #0c0c16;
+    --bg-2: #11111f;
+    --bg-3: #16162a;
+    --line: rgba(255,255,255,0.06);
+    --line-2: rgba(255,255,255,0.10);
+    --fg-1: #f5f5fa;
+    --fg-2: #c9c9d8;
+    --fg-3: #8a8aa3;
+    --fg-4: #5a5a72;
+    --accent: #7c5cff;
+    --accent-2: #22d3ee;
+    --ok: #22c55e;
+    --warn: #f59e0b;
+    --err: #ef4444;
+    --muted: #6b7280;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg-0);
+    color: var(--fg-1);
+    font-family: "Inter", "Geist", -apple-system, BlinkMacSystemFont,
+                  "Segoe UI", system-ui, sans-serif;
+    font-feature-settings: "cv11", "ss01", "ss03";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    min-height: 100vh;
+  }
+  body {
+    background:
+      radial-gradient(1200px 800px at 10% -10%, rgba(124,92,255,0.16), transparent 60%),
+      radial-gradient(900px 700px at 110% 10%, rgba(34,211,238,0.12), transparent 60%),
+      radial-gradient(700px 500px at 50% 120%, rgba(168,85,247,0.10), transparent 60%),
+      var(--bg-0);
+    background-attachment: fixed;
+  }
+  a { color: inherit; text-decoration: none; }
+
+  /* ───── Header ───── */
+  header.top {
+    position: sticky; top: 0; z-index: 50;
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    background: rgba(7,7,13,0.65);
+    border-bottom: 1px solid var(--line);
+  }
+  .top-inner {
+    max-width: 1400px; margin: 0 auto;
+    padding: 18px 28px;
+    display: flex; align-items: center; gap: 20px;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 14px;
+    font-weight: 600; font-size: 18px;
+    letter-spacing: -0.02em;
+  }
+  .brand-mark {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    display: grid; place-items: center;
+    font-size: 18px;
+    box-shadow: 0 8px 32px rgba(124,92,255,0.35),
+                 inset 0 1px 0 rgba(255,255,255,0.25);
+  }
+  .brand-sub {
+    color: var(--fg-3); font-weight: 400; font-size: 13px;
+    margin-left: -6px;
+  }
+
+  .search-wrap {
+    flex: 1; max-width: 540px; margin-left: auto;
+    position: relative;
+  }
+  .search {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--line-2);
+    color: var(--fg-1);
+    padding: 11px 14px 11px 40px;
+    border-radius: 12px;
+    font-size: 14px;
+    outline: none;
+    transition: border-color .15s, background .15s;
+  }
+  .search:focus { border-color: rgba(124,92,255,0.6); background: rgba(255,255,255,0.06); }
+  .search::placeholder { color: var(--fg-4); }
+  .search-icon {
+    position: absolute; left: 14px; top: 50%;
+    transform: translateY(-50%); color: var(--fg-4);
+    font-size: 14px;
+  }
+
+  .header-meta {
+    display: flex; align-items: center; gap: 14px;
+    color: var(--fg-3); font-size: 12px;
+  }
+  .header-meta .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--ok); display: inline-block; margin-right: 6px;
+    box-shadow: 0 0 8px var(--ok);
+  }
+  .refresh-btn {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--line-2);
+    color: var(--fg-2); padding: 8px 12px;
+    border-radius: 10px; font-size: 12px;
+    cursor: pointer; transition: background .15s;
+  }
+  .refresh-btn:hover { background: rgba(255,255,255,0.07); }
+
+  /* ───── Hero / pulse strip ───── */
+  .pulse {
+    max-width: 1400px; margin: 28px auto 0;
+    padding: 0 28px;
+  }
+  .pulse-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+  }
+  .pulse-card {
+    padding: 18px 20px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015));
+    border: 1px solid var(--line-2);
+    border-radius: 16px;
+    transition: transform .2s, border-color .2s;
+  }
+  .pulse-card:hover { transform: translateY(-2px); border-color: rgba(124,92,255,0.35); }
+  .pulse-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--fg-3); }
+  .pulse-value {
+    margin-top: 6px;
+    font-size: 26px; font-weight: 600;
+    letter-spacing: -0.025em;
+    font-variant-numeric: tabular-nums;
+  }
+  .pulse-detail { margin-top: 4px; font-size: 12px; color: var(--fg-3); }
+  .pulse-card.ok { border-color: rgba(34,197,94,0.35); }
+  .pulse-card.warn { border-color: rgba(245,158,11,0.45); }
+  .pulse-card.err { border-color: rgba(239,68,68,0.45); }
+
+  /* ───── Categories ───── */
+  main { max-width: 1400px; margin: 28px auto 80px; padding: 0 28px; }
+
+  .category { margin-top: 38px; }
+  .cat-head {
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 16px;
+  }
+  .cat-mark {
+    width: 38px; height: 38px;
+    border-radius: 11px;
+    display: grid; place-items: center;
+    font-size: 19px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--line-2);
+  }
+  .cat-title {
+    font-size: 18px; font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .cat-count {
+    color: var(--fg-3); font-size: 12px;
+    background: rgba(255,255,255,0.04);
+    padding: 3px 9px; border-radius: 999px;
+    border: 1px solid var(--line);
+  }
+  .cat-rule {
+    flex: 1; height: 1px; background: linear-gradient(90deg, var(--line-2), transparent);
+    margin-left: 4px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(305px, 1fr));
+    gap: 14px;
+  }
+  .card {
+    position: relative;
+    padding: 18px 18px 16px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.012));
+    border: 1px solid var(--line-2);
+    border-radius: 14px;
+    transition: transform .2s, border-color .2s, background .2s;
+    overflow: hidden;
+  }
+  .card::before {
+    content: '';
+    position: absolute; left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--card-accent, var(--accent));
+    opacity: 0.85;
+  }
+  .card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(255,255,255,0.20);
+    background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.025));
+  }
+  .card-head { display: flex; align-items: flex-start; gap: 12px; }
+  .card-icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.06);
+    display: grid; place-items: center;
+    font-size: 17px; flex-shrink: 0;
+  }
+  .card-title-block { min-width: 0; flex: 1; }
+  .card-title {
+    font-weight: 600; font-size: 15px;
+    letter-spacing: -0.015em;
+    line-height: 1.3;
+    word-break: break-word;
+  }
+  .card-url {
+    font-size: 11px; color: var(--fg-3);
+    margin-top: 3px;
+    overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; font-family: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  }
+  .card-desc {
+    margin-top: 10px;
+    font-size: 13px; color: var(--fg-2); line-height: 1.5;
+    min-height: 38px;
+  }
+  .card-foot {
+    margin-top: 12px;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .tag {
+    font-size: 10.5px; letter-spacing: 0.02em;
+    background: rgba(255,255,255,0.05);
+    color: var(--fg-3);
+    padding: 3px 8px;
+    border-radius: 6px;
+    text-transform: lowercase;
+  }
+  .tag.prod { background: rgba(34,197,94,0.15); color: #6ee7a3; }
+  .tag.production { background: rgba(34,197,94,0.15); color: #6ee7a3; }
+  .tag.demo { background: rgba(168,85,247,0.16); color: #d4b3ff; }
+  .tag.health { background: rgba(124,92,255,0.16); color: #c4b1ff; }
+  .tag.ci { background: rgba(245,158,11,0.18); color: #fbcd6c; }
+
+  .status {
+    margin-left: auto;
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; color: var(--fg-3);
+  }
+  .status .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--muted);
+  }
+  .status.ok .dot { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .status.warn .dot { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+  .status.err .dot { background: var(--err); box-shadow: 0 0 8px var(--err); }
+  .status.checking .dot { background: var(--accent-2); animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+
+  /* ───── Footer ───── */
+  footer {
+    max-width: 1400px; margin: 50px auto 30px;
+    padding: 22px 28px;
+    border-top: 1px solid var(--line);
+    color: var(--fg-3); font-size: 12px;
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 10px;
+  }
+  footer code {
+    background: rgba(255,255,255,0.04); padding: 1px 6px; border-radius: 4px;
+    font-family: "JetBrains Mono", "SF Mono", Menlo, monospace; font-size: 11px;
+  }
+
+  .hidden { display: none !important; }
+  .skeleton {
+    color: var(--fg-3); padding: 30px; text-align: center;
+    border: 1px dashed var(--line-2); border-radius: 12px;
+  }
+
+  @media (max-width: 720px) {
+    .top-inner { flex-wrap: wrap; padding: 14px 18px; }
+    .search-wrap { order: 3; flex-basis: 100%; max-width: none; margin-left: 0; }
+    main, .pulse, footer { padding-left: 16px; padding-right: 16px; }
+    .pulse { margin-top: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <div class="brand-mark">🧭</div>
+      <div>
+        Hermes Hub
+        <span class="brand-sub">— Network Command Centre</span>
+      </div>
+    </div>
+    <div class="search-wrap">
+      <span class="search-icon">⌕</span>
+      <input id="q" class="search" placeholder="Search services, tags, URLs… (⌘K)" autocomplete="off">
+    </div>
+    <div class="header-meta">
+      <div><span class="dot"></span><span id="online-summary">checking…</span></div>
+      <button class="refresh-btn" id="refresh">Refresh</button>
+    </div>
+  </div>
+</header>
+
+<section class="pulse">
+  <div class="pulse-grid" id="pulse-grid">
+    <div class="pulse-card" id="pulse-services">
+      <div class="pulse-label">Services tracked</div>
+      <div class="pulse-value">—</div>
+      <div class="pulse-detail">Loading manifest…</div>
+    </div>
+    <div class="pulse-card" id="pulse-online">
+      <div class="pulse-label">Live status</div>
+      <div class="pulse-value">—</div>
+      <div class="pulse-detail">Pinging endpoints…</div>
+    </div>
+    <div class="pulse-card" id="pulse-hermes">
+      <div class="pulse-label">Hermes API</div>
+      <div class="pulse-value">—</div>
+      <div class="pulse-detail">checking…</div>
+    </div>
+    <div class="pulse-card" id="pulse-last">
+      <div class="pulse-label">Last Hermes edit</div>
+      <div class="pulse-value">—</div>
+      <div class="pulse-detail">—</div>
+    </div>
+  </div>
+</section>
+
+<main id="categories">
+  <div class="skeleton">Fetching manifest…</div>
+</main>
+
+<footer>
+  <div>
+    Maintained by <strong style="color:var(--fg-1)">Hermes</strong> via MCP ·
+    manifest at <code>/api/hub/manifest</code> ·
+    refresh interval 60s
+  </div>
+  <div id="footer-updated">—</div>
+</footer>
+
+<script>
+const STATE = { manifest: null, statuses: {} };
+
+function $(sel) { return document.querySelector(sel); }
+function el(tag, attrs = {}, ...children) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v;
+    else if (k === 'style') e.setAttribute('style', v);
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v);
+  }
+  for (const c of children.flat()) {
+    if (c == null) continue;
+    e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+  }
+  return e;
+}
+function fmtAgo(iso) {
+  if (!iso) return '—';
+  const t = new Date(iso).getTime();
+  const sec = Math.floor((Date.now() - t) / 1000);
+  if (sec < 60) return `${sec}s ago`;
+  if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
+  if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
+  return `${Math.floor(sec / 86400)}d ago`;
+}
+
+async function loadManifest() {
+  try {
+    const r = await fetch('/api/hub/manifest', { cache: 'no-store' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    STATE.manifest = await r.json();
+    renderAll();
+    pingAll();
+  } catch (e) {
+    $('#categories').innerHTML =
+      `<div class="skeleton">Couldn't load manifest: ${e.message}<br>
+       <small>Is hermes-api running? Check <code>/api/health</code>.</small></div>`;
+  }
+}
+
+function renderAll() {
+  const m = STATE.manifest;
+  if (!m) return;
+  const root = $('#categories');
+  root.innerHTML = '';
+  let total = 0;
+  for (const cat of (m.categories || []).sort((a,b) => (a.order||999)-(b.order||999))) {
+    const sec = el('section', { class: 'category', 'data-cat': cat.id });
+    sec.appendChild(el('div', { class: 'cat-head' },
+      el('div', { class: 'cat-mark', style: `border-color: ${cat.accent || 'var(--line-2)'}; color: ${cat.accent || 'var(--fg-2)'}` }, cat.icon || '◆'),
+      el('div', { class: 'cat-title' }, cat.name || cat.id),
+      el('div', { class: 'cat-count' }, String((cat.links || []).length)),
+      el('div', { class: 'cat-rule' }),
+    ));
+    const grid = el('div', { class: 'grid' });
+    for (const link of cat.links || []) {
+      total++;
+      grid.appendChild(renderCard(link, cat));
+    }
+    sec.appendChild(grid);
+    root.appendChild(sec);
+  }
+  // pulse
+  $('#pulse-services .pulse-value').textContent = String(total);
+  $('#pulse-services .pulse-detail').textContent =
+    `${(m.categories || []).length} categories`;
+  const last = m.last_change || {};
+  $('#pulse-last .pulse-value').textContent = last.who || '—';
+  $('#pulse-last .pulse-detail').textContent =
+    last.what ? `${last.what} · ${fmtAgo(last.at)}` : '—';
+  $('#footer-updated').textContent = `manifest updated ${fmtAgo(m.updated_at)}`;
+}
+
+function renderCard(link, cat) {
+  const card = el('article', { class: 'card', 'data-id': link.id,
+                                  'data-name': (link.name||'').toLowerCase(),
+                                  'data-tags': (link.tags||[]).join(',').toLowerCase(),
+                                  style: `--card-accent: ${cat.accent || 'var(--accent)'}` });
+  card.appendChild(el('a', { href: link.url, target: '_blank', rel: 'noopener noreferrer' },
+    el('div', { class: 'card-head' },
+      el('div', { class: 'card-icon' }, link.icon || cat.icon || '◆'),
+      el('div', { class: 'card-title-block' },
+        el('div', { class: 'card-title' }, link.name),
+        el('div', { class: 'card-url' }, link.url.replace(/^https?:\/\//, '')),
+      ),
+    ),
+    el('div', { class: 'card-desc' }, link.description || ''),
+    el('div', { class: 'card-foot' },
+      ...(link.tags || []).map(t => el('span', { class: 'tag '+t }, t)),
+      el('div', { class: 'status checking', 'data-status-for': link.id },
+        el('span', { class: 'dot' }),
+        el('span', { class: 'status-text' }, link.health_url ? 'checking' : 'no-check'),
+      ),
+    ),
+  ));
+  return card;
+}
+
+async function pingOne(link) {
+  if (!link.health_url) {
+    return { id: link.id, state: 'unknown' };
+  }
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 6000);
+    // no-cors lets us at least confirm the endpoint reachable without
+    // CORS preflight — opaque response, status will be 0 but a thrown
+    // error means the host is unreachable.
+    await fetch(link.health_url, { mode: 'no-cors', signal: ctl.signal,
+                                       cache: 'no-store' });
+    clearTimeout(t);
+    return { id: link.id, state: 'ok' };
+  } catch {
+    return { id: link.id, state: 'err' };
+  }
+}
+
+async function pingAll() {
+  if (!STATE.manifest) return;
+  const links = [];
+  for (const cat of STATE.manifest.categories || []) {
+    for (const link of cat.links || []) {
+      if (link.health_url) links.push(link);
+    }
+  }
+  let ok = 0, total = 0;
+  const results = await Promise.all(links.map(pingOne));
+  for (const r of results) {
+    STATE.statuses[r.id] = r.state;
+    const stEl = document.querySelector(`[data-status-for="${r.id}"]`);
+    if (stEl) {
+      stEl.classList.remove('checking', 'ok', 'warn', 'err');
+      stEl.classList.add(r.state === 'ok' ? 'ok' : 'err');
+      stEl.querySelector('.status-text').textContent =
+        r.state === 'ok' ? 'reachable' : 'unreachable';
+    }
+    if (r.state === 'ok') ok++;
+    total++;
+  }
+  const pct = total ? Math.round((ok/total)*100) : 100;
+  $('#online-summary').textContent = `${ok}/${total} reachable`;
+  const card = $('#pulse-online');
+  card.classList.remove('ok','warn','err');
+  card.classList.add(pct === 100 ? 'ok' : (pct >= 70 ? 'warn' : 'err'));
+  card.querySelector('.pulse-value').textContent = `${pct}%`;
+  card.querySelector('.pulse-detail').textContent = `${ok} of ${total} services`;
+}
+
+async function pingHermes() {
+  try {
+    const r = await fetch('/api/health', { cache: 'no-store' });
+    const d = await r.json();
+    const card = $('#pulse-hermes');
+    card.classList.remove('ok','warn','err');
+    card.classList.add(d.status === 'ok' ? 'ok' : (d.status === 'degraded' ? 'warn' : 'err'));
+    card.querySelector('.pulse-value').textContent = d.status || 'unknown';
+    const llmCount = Object.keys(d.llm_providers || {}).length;
+    const brCount = Object.values(d.bridges || {}).filter(b => b === 'ok').length;
+    card.querySelector('.pulse-detail').textContent =
+      `${llmCount} LLM · ${brCount} bridges · sqlite ${d.sqlite || '?'}`;
+  } catch {
+    const card = $('#pulse-hermes');
+    card.classList.remove('ok','warn'); card.classList.add('err');
+    card.querySelector('.pulse-value').textContent = 'down';
+    card.querySelector('.pulse-detail').textContent = 'unreachable from browser';
+  }
+}
+
+// search
+$('#q').addEventListener('input', (e) => {
+  const q = e.target.value.toLowerCase().trim();
+  for (const card of document.querySelectorAll('.card')) {
+    if (!q) { card.classList.remove('hidden'); continue; }
+    const hay = (card.dataset.name || '') + ' ' + (card.dataset.tags || '') + ' ' +
+                 (card.querySelector('.card-url')?.textContent || '') + ' ' +
+                 (card.querySelector('.card-desc')?.textContent || '').toLowerCase();
+    card.classList.toggle('hidden', !hay.includes(q));
+  }
+  for (const sec of document.querySelectorAll('.category')) {
+    const visible = sec.querySelectorAll('.card:not(.hidden)').length;
+    sec.classList.toggle('hidden', visible === 0);
+  }
+});
+
+// keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    $('#q').focus();
+    $('#q').select();
+  }
+  if (e.key === 'Escape' && document.activeElement === $('#q')) {
+    $('#q').value = ''; $('#q').dispatchEvent(new Event('input'));
+    $('#q').blur();
+  }
+});
+
+$('#refresh').addEventListener('click', () => { loadManifest(); pingHermes(); });
+
+// initial + periodic
+loadManifest();
+pingHermes();
+setInterval(loadManifest, 60_000);
+setInterval(pingAll, 60_000);
+setInterval(pingHermes, 30_000);
+</script>
+</body>
+</html>
