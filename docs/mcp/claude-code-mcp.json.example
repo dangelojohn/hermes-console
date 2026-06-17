@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "hermes": {
+      "command": "/Users/naadmin/bin/hermes-mcp",
+      "env": {
+        "HERMES_MCP_CLIENT": "claude-code-main"
+      }
+    }
+  }
+}
