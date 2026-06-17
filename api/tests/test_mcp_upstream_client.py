@@ -56,6 +56,7 @@ class _FakeResp:
         self._body = body
         self.status_code = 200
         self.text = json.dumps(body)
+        self.headers = {"content-type": "application/json"}
 
     def json(self) -> dict:
         return self._body

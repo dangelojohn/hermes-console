@@ -141,6 +141,14 @@ class UpstreamMCPClient:
         result = await self._rpc("tools/list", {})
         return result.get("tools") or []
 
+    async def call_tool(
+        self, name: str, arguments: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        return await self._rpc(
+            "tools/call",
+            {"name": name, "arguments": arguments},
+        )
+
 
 def _parse_streamable_http_body(resp: httpx.Response) -> Optional[Dict[str, Any]]:
     """Return the JSON-RPC body from a streamable-http MCP response.
@@ -169,14 +177,6 @@ def _parse_streamable_http_body(resp: httpx.Response) -> Optional[Dict[str, Any]
         return resp.json()
     except ValueError:
         return None
-
-    async def call_tool(
-        self, name: str, arguments: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        return await self._rpc(
-            "tools/call",
-            {"name": name, "arguments": arguments},
-        )
 
 
 # ---------------------------------------------------------------------------
