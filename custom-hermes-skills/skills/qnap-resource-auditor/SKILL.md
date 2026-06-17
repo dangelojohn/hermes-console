@@ -93,6 +93,19 @@ $ python3 scripts/run_skill.py qnap-resource-auditor --compare-to-map
 | SSH fails | cloudflared Access JWT expired | Run `cloudflared access login ssh.odooiq.com` |
 | Container missing from output | It's stopped | Check `docker ps -a` and document why |
 
+## Current environment baseline (as of 2026-06-16)
+
+Live snapshot in `evidence/qnap-network-snapshot-2026-06-16.md`. Hermes should treat these as starting facts; drift = something to flag.
+
+- **QNAP host**: `OdooIQ` at `192.168.68.76/22` (eth0); gateway `192.168.68.1`; DNS `127.0.1.1` (internal proxy)
+- **16 Docker bridge networks** managed by Container Station's system-docker daemon (see `QNAP_RESOURCE_MAP.md` for the full table)
+- **26 running containers** across 9 product stacks (Hermes Console, Southbrook, AlfaCore, Forgejo, Cloudflared, plus 6 demo Odoo stacks: porterly, odooai, sapienzium, tribancs, quattroporte, odooiq)
+- **`alfacore-caddy` multi-attached to 12 of the 16 bridges** — single biggest trust concentration; treat as critical
+- **`cloudflared` on host network** — reaches every container subnet from one namespace
+- **Forgejo SSH** bound `2222->22/tcp` on host (LAN-reachable)
+- **New container vs prior map**: `product-graph-mcp:0.1.2` on `southbrook-net` (healthy, up 3d)
+- **New network vs prior map**: `hermes-outbound` (172.30.56.0/22) holds `hermes-whatsapp` only
+
 ## Source inspiration
 
 See `SOURCE_INSPIRATION.md`.

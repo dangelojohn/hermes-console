@@ -122,6 +122,18 @@ $ python3 scripts/run_skill.py tplink-omada-oc200-admin --scope inventory
 | Device shows "isolated" | Switch uplink mismatch | Check VLAN tagging on the uplink port |
 | AP offline alert | PoE budget exceeded OR uplink down | Check switch PoE + cable |
 
+## Current environment baseline (as of 2026-06-16)
+
+Live evidence in `evidence/qnap-lan-scan-2026-06-16.md`. Use as drift-detection baseline when running `inventory`:
+
+- **3 distinct TP-Link OUIs visible on the wired side:** `58:d3:49`, `ec:71:db`, `cc:32:e5`, totaling 10 devices
+- **2 TP-Link MACs already seen in IPv6 neighbor table:** `58:d3:49:40:df:42` and `58:d3:49:44:da:80` — likely the 2 Omada APs the controller has adopted
+- Remaining 8 TP-Link devices on the LAN are unclassified from outside the controller; require OC200 read to confirm whether they are wired infrastructure (switch, gateway, additional AP) vs TP-Link smart-home (Kasa, Tapo)
+- Gateway `192.168.68.1` MAC `20:23:51:5f:6d:d5` is NOT a recognized TP-Link OUI — verify whether this is an ISP-supplied gateway sitting upstream of the Omada network OR a TP-Link product family with a less-common OUI
+- LAN subnet `192.168.68.0/22` (1024 ceiling; current DHCP-active band `.52`–`.83`)
+
+If the next `inventory` run sees fewer than 3 TP-Link OUIs OR fewer than 2 APs in the IPv6 neighbor table, flag as drift.
+
 ## Source inspiration
 
 See `SOURCE_INSPIRATION.md`.

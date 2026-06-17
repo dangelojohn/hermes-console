@@ -118,6 +118,31 @@ $ python3 scripts/run_skill.py network-change-reviewer \
 |---|---|---|
 | Missing rollback | Operator didn't supply prior state | Re-run the intake skill to capture current state before planning |
 
+## Current environment baseline (as of 2026-06-16)
+
+Live evidence in `evidence/qnap-lan-scan-2026-06-16.md` and `evidence/qnap-network-snapshot-2026-06-16.md`. Use these as default "affected" populations in every Change Plan unless the operator narrows scope:
+
+| Affected resource | Default count |
+|---|---|
+| LAN endpoints | 27 |
+| Wi-Fi-attached endpoints (subset) | ~17 (Apple + randomized + IoT) |
+| TP-Link infrastructure | 10 across 3 OUIs (2 confirmed APs + 8 unclassified) |
+| Docker containers | 26 running |
+| Docker networks | 16 bridge + host |
+| Public hostnames behind `qnap-odooiq` tunnel | ~14 (hermes, git, ssh, southbrook + 6 demo sites + admin paths) |
+| Bridges (tenant outbound) | 1 production (`southbrook_hermes`); +1 scaffolded (`home_assistant`, default-off) |
+
+**Risk-class shortcuts (defaults; operator can override):**
+- Change to a single docker container env-var → low-risk reversible
+- Cloudflare cache or transform rule change → medium-risk (cache invalidation may take 4h on Cloudflare edge)
+- VLAN/DHCP-scope change → high-risk (DHCP renewal storm + reconnection)
+- Gateway-MAC change or remote-management lockout candidate → critical (requires out-of-band LAN access verified BEFORE apply)
+
+**Mandatory backup-before-change targets (cite specific files in the Change Plan):**
+- Caddyfile snippet: `/share/CACHEDEV3_DATA/Container/odoo/config/Caddyfile`
+- OC200 controller config: operator-driven Settings → Backup & Restore export
+- Cloudflare zone JSON: GET the ruleset + DNS via API before any apply
+
 ## Source inspiration
 
 See `SOURCE_INSPIRATION.md`.

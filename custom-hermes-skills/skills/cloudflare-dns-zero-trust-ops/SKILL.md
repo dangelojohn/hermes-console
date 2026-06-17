@@ -115,6 +115,28 @@ $ python3 scripts/run_skill.py cloudflare-dns-zero-trust-ops \
 | API 403 | Token scope too narrow | Issue a narrower-scope token rather than broadening this one |
 | Missing Access apps | Token lacks `Access:Read` | Re-issue with `Access:Read` ADD only |
 
+## Current environment baseline (as of 2026-06-16)
+
+Live evidence in `evidence/qnap-network-snapshot-2026-06-16.md`.
+
+**Cloudflare account anchors:**
+- Tunnel: `qnap-odooiq` (single tunnel; cloudflared container on QNAP host network)
+- Access team: `divine-heart-1e81.cloudflareaccess.com`
+- Default IdP for new Access apps: email-OTP on `dangelo.john@gmail.com`
+- Known zones (verify via API): `odooiq.com`, `southbrookcabinetry.space`, plus demo-site domains (sapienzium.com, tribancs.*, quattroporte.*, porterly.*, odooai.*)
+
+**Origin facts (the other side of every DNS record this skill audits):**
+- All public hostnames terminate to `alfacore-caddy` on QNAP host ports 9080/9443/9444–9452
+- `cloudflared` runs on host network, can reach every container subnet
+- Origin certificates for these zones (if any) live on the Caddy side; SSL/TLS mode flip from `Full` → `Full (strict)` requires confirming origin cert presence first
+
+**Known open routing issue (still pending):** Forgejo HTTPS Git push via `git.southbrookcabinetry.space/git/<org>/<repo>.git` returns 307 that adds an extra `/git/` segment → 404. Root cause is in the Caddy/Cloudflare layer, not Forgejo. Worth flagging on every audit of `southbrookcabinetry.space`.
+
+**DNS records that should be checked first in any audit** (most likely to drift):
+- `hermes.odooiq.com` (added recently)
+- `git.southbrookcabinetry.space` (routing flake)
+- Any record proxied=DNS-only pointing at the QNAP LAN IP — that bypasses Cloudflare entirely
+
 ## Source inspiration
 
 See `SOURCE_INSPIRATION.md`.

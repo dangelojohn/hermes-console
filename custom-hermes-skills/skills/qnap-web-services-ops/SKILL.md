@@ -97,6 +97,32 @@ $ python3 scripts/run_skill.py qnap-web-services-ops \
 | Caddy returns 502 after snippet applied | autosave.json cached old config | Full `docker restart alfacore-caddy` |
 | Public URL returns Cloudflare default page | Tunnel route not added yet | Verify Chrome Claude ran the prompt |
 
+## Current environment baseline (as of 2026-06-16)
+
+Live snapshot in `evidence/qnap-network-snapshot-2026-06-16.md`. Treat these as the source of truth for the reverse-proxy + tunnel topology.
+
+**`alfacore-caddy` is multi-attached to 12 networks** — every per-site stack reaches Caddy via its own bridge interface:
+
+```
+alfacore-net=172.30.36.5    forgejo-net=172.30.32.5    hermes-net=172.30.48.4
+odoo15-net=172.30.40.2      odoo16-net=172.30.44.2     odooai-net=172.30.28.5
+odooiq-net=172.30.20.5      porterly-net=172.30.12.5   quattroporte-net=172.30.24.5
+sapienzium-net=172.30.8.5   southbrook-net=172.30.4.7  tribancs-net=172.30.16.5
+```
+
+**Host port bindings (Caddy + Forgejo SSH):**
+
+| Host port | Service |
+|---|---|
+| 9080 | HTTP catch-all → `alfacore-caddy:80` |
+| 9443 | HTTPS catch-all → `alfacore-caddy:443` |
+| 9444–9452 | Per-site dedicated ports |
+| 2222 | Forgejo SSH → `forgejo:22` (LAN-bound; tunnel routing for `git.southbrookcabinetry.space` is separate) |
+
+**`cloudflared` runs on host network** (Cloudflare tunnel `qnap-odooiq`). It can reach every container subnet through the host namespace.
+
+**Cloudflare Access team:** `divine-heart-1e81.cloudflareaccess.com`; default IdP for new apps is email-OTP.
+
 ## Source inspiration
 
 See `SOURCE_INSPIRATION.md`.

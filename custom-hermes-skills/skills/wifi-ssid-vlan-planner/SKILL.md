@@ -106,6 +106,29 @@ $ python3 scripts/run_skill.py wifi-ssid-vlan-planner \
 |---|---|---|
 | Default deny breaks AirPrint | mDNS doesn't traverse VLANs by default | Add mDNS gateway / Avahi reflector or carve a print VLAN |
 
+## Current environment baseline (as of 2026-06-16)
+
+Live evidence in `evidence/qnap-lan-scan-2026-06-16.md`. Use these counts to size each tier of the default segmentation model:
+
+| Default tier | Expected count today | Source |
+|---|---|---|
+| Admin / infrastructure management | ~10 | 3 TP-Link OUIs × ~3 devices (APs + switch + gateway equivalent) |
+| Staff trusted | ~10 | 5 Apple explicit + 5 randomized-MAC (likely iOS) |
+| IoT / low-trust | ≥ 2 confirmed | Sonos + Ecobee (more likely once TP-Link smart-home are classified) |
+| Servers / NAS | 1 | QNAP `OdooIQ` itself |
+| Odoo business application | (n/a — currently container-internal on the QNAP) | hermes-console + southbrook stacks live on docker bridges, not the LAN |
+| Guest | 0 (no guest SSID observed) | |
+| Lab/test | 0 | |
+
+**Today's flat LAN:** 27 endpoints share one broadcast domain on `192.168.68.0/22`. DHCP-active range `.52`–`.83` (well below the /22 ceiling — segmentation can carve into smaller subnets without DHCP pressure).
+
+**Concrete planning numbers for proposals:**
+- IoT VLAN candidate: `192.168.69.0/24` (or operator preference); 2+ devices day-1
+- Staff VLAN candidate: `192.168.68.0/24`; ~10 devices day-1
+- Admin/infra VLAN candidate: `192.168.71.0/24`; ~10 TP-Link devices day-1 (validate AP allocation in OC200)
+
+These are CANDIDATE numbers — final IDs / subnets are operator decisions. Plans MUST mark all final assignments as "needs confirmation" until the operator signs off.
+
 ## Source inspiration
 
 See `SOURCE_INSPIRATION.md`.

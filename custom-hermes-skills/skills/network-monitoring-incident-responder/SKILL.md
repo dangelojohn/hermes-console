@@ -93,6 +93,25 @@ $ python3 scripts/run_skill.py network-monitoring-incident-responder \
 |---|---|---|
 | Symptom too vague | Operator needs to clarify | Ask for one concrete observation per layer |
 
+## Current environment baseline (as of 2026-06-16)
+
+Live evidence in `evidence/qnap-lan-scan-2026-06-16.md` and `evidence/qnap-network-snapshot-2026-06-16.md`.
+
+**LAN-side triage anchors:**
+- 27 endpoints share one broadcast domain — "slow Wi-Fi" baseline must compare against this density
+- DHCP-active band `.52`–`.83` (well below the /22 ceiling); DHCP exhaustion is NOT a likely current cause unless the scope shrank or a rogue DHCP server appeared
+- 2 TP-Link APs visible via IPv6 (`58:d3:49:40:df:42`, `58:d3:49:44:da:80`) — if an AP-offline alert hits, these are the candidate IDs
+- Gateway `192.168.68.1` MAC `20:23:51:5f:6d:d5` — gateway-flap will show as a MAC change
+
+**Edge-side triage anchors:**
+- Cloudflare tunnel `qnap-odooiq`; team `divine-heart-1e81.cloudflareaccess.com`
+- 502/521/522/525 from edge has known root causes per `networking-cloudflare-architect`'s troubleshooting matrix
+- `cloudflared` runs on host network — if the connector dies, every public hostname goes 502 simultaneously
+
+**Origin-side triage anchors:**
+- `alfacore-caddy` multi-attached to 12 networks; if a single Caddy snippet is wrong, that hostname 502s but others stay green
+- `hermes-api` uses debounced LLM health (today's 1588b21) — a single 429 in the rolling window does NOT flip the pill
+
 ## Source inspiration
 
 See `SOURCE_INSPIRATION.md`.

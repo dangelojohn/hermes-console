@@ -97,6 +97,26 @@ $ python3 scripts/run_skill.py qnap-container-ops --container hermes-api --mode 
 | Container not found | Spelled wrong, or stopped | Verify via `docker ps -a` (resource auditor) |
 | Container restart hangs | Healthcheck holding | Check `docker inspect <c>` for `Health.Status` |
 
+## Current environment baseline (as of 2026-06-16)
+
+Live snapshot in `evidence/qnap-network-snapshot-2026-06-16.md`. **Authoritative container roster** for this skill's name allowlist:
+
+**Hermes Console:** `hermes-api` (hermes-net), `hermes-ui` (hermes-net), `hermes-whatsapp` (hermes-net + hermes-outbound)
+
+**Southbrook production:** `southbrook-odoo`, `southbrook-postgres`, `southbrook-freecad-bridge`, `product-graph-mcp` — all on `southbrook-net`
+
+**AlfaCore:** `alfacore-odoo`, `alfacore-postgres`, `alfacore-caddy` (12-net multi-attach)
+
+**Forgejo:** `forgejo`, `forgejo-postgres`, `forgejo-runner` — all on `forgejo-net`; runner mounts `system-docker.sock`
+
+**Edge:** `cloudflared` on host network
+
+**Demo Odoo stacks (each has `-odoo` + `-postgres`):** `porterly`, `odooai`, `sapienzium`, `tribancs`, `quattroporte`, `odooiq`
+
+**Restart cure documented in memory `qnap_odoo_upgrade_cache_reset.md`:** `docker restart southbrook-odoo` after any `-u` that hits ormcache poisoning.
+
+**Docker invocation prefix on QNAP**: `DOCKER_HOST=unix:///var/run/system-docker.sock /share/CACHEDEV3_DATA/.qpkg/container-station/bin/docker`
+
 ## Source inspiration
 
 See `SOURCE_INSPIRATION.md`.

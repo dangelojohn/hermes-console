@@ -226,6 +226,35 @@ $ python3 scripts/run_skill.py network-cloudflare-omada-admin --scope inventory
 | OC200 unreachable | controller VLAN not in admin network | adjust management VLAN access |
 | TP-Link cloud login fails | 2FA email not delivered | check account email + Cloudflare email security |
 
+## Current environment baseline (as of 2026-06-16)
+
+Live snapshots in `evidence/qnap-network-snapshot-2026-06-16.md` and `evidence/qnap-lan-scan-2026-06-16.md`.
+
+**LAN today (one flat broadcast domain):**
+- Subnet `192.168.68.0/22` (1024-address ceiling; current DHCP-active band `.52`–`.83`)
+- Gateway `192.168.68.1` (MAC `20:23:51:5f:6d:d5` — uncommon OUI, verify if ISP-supplied vs Omada gateway)
+- **27 distinct hosts** responding to ICMP
+
+**Vendor mix:**
+
+| Group | Count |
+|---|---|
+| TP-Link (3 OUIs: `58:d3:49`, `ec:71:db`, `cc:32:e5`) | 10 — likely 2 Omada APs + wired infra + smart-home |
+| Apple (5 explicit OUIs) | 5 |
+| Apple-likely (randomized MACs / iOS Private Wi-Fi) | 5 |
+| Sonos (`94:9f:3e`) | 1 |
+| Ecobee (`44:61:32`) | 1 |
+| Hon Hai / Foxconn (`6c:56:97`) | 1 |
+| Sony (`8c:a4:01`) | 1 |
+| Uncertain / uncommon | 2 (incl. gateway) |
+
+**Cloud + edge:**
+- Cloudflare tunnel `qnap-odooiq` (single tunnel, multiple public hostnames)
+- Cloudflare Access team `divine-heart-1e81.cloudflareaccess.com`
+- Cloudflare Access default IdP: email-OTP
+
+**Drift triggers (if any of these change, flag in the Change Plan):** QNAP IP, gateway MAC, count of TP-Link OUIs, count of IoT classes, new Docker networks not declared in a compose file.
+
 ## Source inspiration
 
 See `SOURCE_INSPIRATION.md`.

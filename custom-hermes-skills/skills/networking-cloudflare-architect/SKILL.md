@@ -242,6 +242,29 @@ Every change MUST have an explicit rollback procedure documented BEFORE it's app
 
 `J-05`, `J-06`, `J-09`, `J-10`
 
+## Current environment baseline (as of 2026-06-16)
+
+Live snapshots in `evidence/qnap-network-snapshot-2026-06-16.md` and `evidence/qnap-lan-scan-2026-06-16.md`. Treat these as starting facts when diagnosing.
+
+**Edge → origin path:**
+- Public hostnames terminate on Cloudflare → `cloudflared` (host-net container) → `alfacore-caddy` (12-bridge multi-attach) → per-stack container
+- Cloudflare team: `divine-heart-1e81.cloudflareaccess.com`
+- Tunnel name: `qnap-odooiq`
+
+**LAN side (where ops + Wi-Fi live):**
+- LAN subnet `192.168.68.0/22`; gateway `192.168.68.1`
+- QNAP host `192.168.68.76/22`
+- 27 LAN endpoints currently active (Apple-heavy ecosystem + 10 TP-Link infrastructure + IoT)
+- 2 TP-Link APs visible via IPv6 neighbor table (OUI `58:d3:49`)
+
+**QNAP fabric:**
+- 16 Docker bridge networks, subnets 172.30.0.0/16 (per-stack) + 172.29.0.0/16 (LXC/LXD pool)
+- 26 running containers across 9 product stacks
+- `alfacore-caddy` multi-attached to 12 of 16 bridges
+- `cloudflared` on host network
+
+**Known routing flake (still open):** Forgejo HTTPS Git push via `git.southbrookcabinetry.space/git/...` returns 307 that adds an extra `/git/` → 404. Caddy or Cloudflare Configuration Rule layer.
+
 ## Source inspiration
 
 See `SOURCE_INSPIRATION.md`.
