@@ -126,12 +126,11 @@ class UpstreamMCPClient:
                     f"upstream {self._cfg.name} {method} "
                     f"http {resp.status_code}: {resp.text[:200]}"
                 )
-            try:
-                data = resp.json()
-            except ValueError as exc:
+            data = _parse_streamable_http_body(resp)
+            if data is None:
                 raise RuntimeError(
                     f"upstream {self._cfg.name} non-json: {resp.text[:200]}"
-                ) from exc
+                )
             if "error" in data:
                 raise RuntimeError(
                     f"upstream {self._cfg.name} jsonrpc error: {data['error']}"
@@ -141,6 +140,35 @@ class UpstreamMCPClient:
     async def list_tools(self) -> List[Dict[str, Any]]:
         result = await self._rpc("tools/list", {})
         return result.get("tools") or []
+
+
+def _parse_streamable_http_body(resp: httpx.Response) -> Optional[Dict[str, Any]]:
+    """Return the JSON-RPC body from a streamable-http MCP response.
+
+    The MCP streamable-http transport returns responses as Server-Sent Events
+    with content-type ``text/event-stream``; each event is an ``event: message
+    \\ndata: <json>`` block. Single request/response calls (as used by
+    initialize / tools/list / tools/call without progress events) come back
+    with exactly ONE such block. Some upstreams (smaller, simpler servers)
+    return raw JSON instead.
+
+    We accept both. For SSE we parse the FIRST ``data:`` line and stop.
+    """
+    import json as _json
+    ctype = (resp.headers.get("content-type") or "").lower()
+    if "text/event-stream" in ctype:
+        for line in resp.text.splitlines():
+            if line.startswith("data:"):
+                payload = line[len("data:"):].strip()
+                try:
+                    return _json.loads(payload)
+                except _json.JSONDecodeError:
+                    return None
+        return None
+    try:
+        return resp.json()
+    except ValueError:
+        return None
 
     async def call_tool(
         self, name: str, arguments: Dict[str, Any]
