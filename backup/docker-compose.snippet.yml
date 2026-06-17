@@ -1,0 +1,35 @@
+# Append this service to ~/hermes-console/docker-compose.yml.
+# It does NOT need depends_on/restart — it's invoked one-shot by host cron
+# (see backup/README.md).
+
+  hermes-backup:
+    container_name: hermes-backup
+    build:
+      context: ./backup
+      dockerfile: Dockerfile
+    image: hermes-console/backup:latest
+    profiles: ["backup"]            # excluded from default `up -d`
+    env_file:
+      - ./backup/.env.backup        # see template at backup/.env.backup.example
+    volumes:
+      # Hermes Console source tree (the working git copy on QNAP)
+      - /share/CACHEDEV3_DATA/Container/hermes-console:/src:ro
+      # SQLite data volume (Hermes API's persistent store)
+      - hermes-data:/data:ro
+      # WhatsApp session volume (one-time QR pair, hot-swap if needed)
+      - hermes-whatsapp-session:/whatsapp-session:ro
+      # Live Caddyfile from the shared alfacore-caddy
+      - /share/CACHEDEV3_DATA/Container/odoo/config/Caddyfile:/caddyfile:ro
+      # The active .env (only read when BACKUP_INCLUDE_ENV=true)
+      - /share/CACHEDEV3_DATA/Container/hermes-console/.env:/env/.env:ro
+      # GPG public key of the operator (recipient)
+      - /share/CACHEDEV3_DATA/Container/hermes-console/backup/recipient.asc:/gpg/recipient.asc:ro
+      # Status JSON output target (host-readable for monitoring)
+      - /share/CACHEDEV3_DATA/OdooIQ-Backups/hermes:/output:rw
+    networks:
+      - hermes-net                  # so it can talk to Forgejo through alfacore-caddy
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
