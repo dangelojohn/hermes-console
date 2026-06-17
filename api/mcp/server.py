@@ -121,6 +121,64 @@ async def run_stdio(db_path: str, key: str) -> int:
             print("unauthorized: invalid or revoked key", file=sys.stderr)
             return 1
 
+        # ---- Phase 1 tool + resource + prompt registration ----
+        # Each tool module declares its own register()/set_*() helpers; we
+        # plug the store + skill root + provider registry + bridges in here
+        # so the registered handlers have everything they need at call time.
+        import os as _os
+        from api.mcp.tools.recommendations import (
+            register as _reg_recs, set_store as _set_recs_store,
+        )
+        from api.mcp.tools.chat import (
+            register as _reg_chat, set_store as _set_chat_store,
+        )
+        from api.mcp.tools.bridges import (
+            register as _reg_bridges, set_bridges as _set_bridges,
+        )
+        from api.mcp.tools.providers import (
+            register as _reg_providers, set_provider_registry as _set_providers,
+        )
+        from api.mcp.tools.skills import (
+            register as _reg_skills, set_skills_root as _set_skills_root,
+        )
+        from api.mcp.resources import set_resources_context as _set_res_ctx
+        from api.mcp.prompts import set_prompts_context as _set_prompts_ctx
+
+        _reg_recs(); _set_recs_store(store)
+        _reg_chat(); _set_chat_store(store)
+
+        # Bridges + provider registry are constructed exactly the same way
+        # the main FastAPI lifespan does it. Tolerant of import/init errors —
+        # the corresponding tools will report "registry not configured"
+        # rather than failing the whole MCP session.
+        try:
+            from api.main import _build_bridges
+            from api.models import Settings
+            settings = Settings()  # type: ignore[call-arg]
+            bridges = _build_bridges(settings)
+            for b in bridges.values():
+                await b.startup()
+            _reg_bridges(); _set_bridges(bridges)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("mcp: bridges init skipped (%s)", exc)
+            _reg_bridges(); _set_bridges({})
+
+        try:
+            from api.llm import ProviderRegistry
+            registry = ProviderRegistry.from_settings(settings)  # type: ignore[name-defined]
+            await registry.startup()
+            _reg_providers(); _set_providers(registry)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("mcp: provider registry init skipped (%s)", exc)
+            _reg_providers(); _set_providers(None)
+
+        skills_root = _os.environ.get(
+            "HERMES_SKILLS_ROOT", "/app/custom-hermes-skills/skills",
+        )
+        _reg_skills(); _set_skills_root(skills_root)
+        _set_res_ctx(store=store, skills_root=skills_root)
+        _set_prompts_ctx(skills_root=skills_root)
+
         server = MCPServer(store, client_id=matched["id"], client_name=matched["name"])
         logger.info("mcp stdio ready client=%s", matched["name"])
 
