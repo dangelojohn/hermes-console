@@ -1,0 +1,14 @@
+{
+  "name": "odoo-controller-api-engineer",
+  "version": "0.1.0",
+  "category": "odoo-backend",
+  "summary": "Audit + scaffold for Odoo HTTP controllers: @http.route, auth, CORS, CSRF, idempotency, error envelopes, ACL rows.",
+  "needs": ["N-05", "N-13"],
+  "jtbds": ["J-09", "J-10"],
+  "default_mode": "read-only",
+  "destructive_actions": false,
+  "requires_confirmation": false,
+  "outputs": [
+    "custom-hermes-skills/runs/odoo-controller-api-engineer/<addon>-<ts>.md"
+  ]
+}

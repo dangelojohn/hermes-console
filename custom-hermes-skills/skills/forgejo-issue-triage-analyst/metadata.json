@@ -1,0 +1,14 @@
+{
+  "name": "forgejo-issue-triage-analyst",
+  "version": "0.1.0",
+  "category": "forgejo",
+  "summary": "Convert Forgejo issues into Need IDs, JTBDs, acceptance criteria, and skill recommendations.",
+  "needs": ["N-10", "N-14"],
+  "jtbds": ["J-07"],
+  "default_mode": "read-only",
+  "destructive_actions": false,
+  "requires_confirmation": false,
+  "outputs": [
+    "custom-hermes-skills/runs/forgejo-issue-triage-analyst/<org-repo>-<ts>.md"
+  ]
+}

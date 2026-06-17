@@ -1,0 +1,14 @@
+{
+  "name": "odoo-owl-component-engineer",
+  "version": "0.1.0",
+  "category": "odoo-frontend",
+  "summary": "Map + scaffold OWL components, services, registries, templates inside Odoo addons.",
+  "needs": ["N-06"],
+  "jtbds": ["J-09"],
+  "default_mode": "read-only",
+  "destructive_actions": false,
+  "requires_confirmation": false,
+  "outputs": [
+    "custom-hermes-skills/runs/odoo-owl-component-engineer/<addon>-<mode>-<ts>/"
+  ]
+}

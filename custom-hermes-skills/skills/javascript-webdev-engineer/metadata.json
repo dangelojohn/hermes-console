@@ -1,0 +1,14 @@
+{
+  "name": "javascript-webdev-engineer",
+  "version": "0.1.0",
+  "category": "javascript",
+  "summary": "Map + scaffold Vue 3 PWA features (view, store slice, nav entry) following the Hermes Console UI conventions.",
+  "needs": ["N-06", "N-17"],
+  "jtbds": ["J-09"],
+  "default_mode": "read-only",
+  "destructive_actions": false,
+  "requires_confirmation": false,
+  "outputs": [
+    "custom-hermes-skills/runs/javascript-webdev-engineer/<mode>-<name>-<ts>/"
+  ]
+}

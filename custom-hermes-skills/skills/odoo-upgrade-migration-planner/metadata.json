@@ -1,0 +1,14 @@
+{
+  "name": "odoo-upgrade-migration-planner",
+  "version": "0.1.0",
+  "category": "odoo-backend",
+  "summary": "Major-version upgrade and data migration planner: per-module quirk screen, migrate(cr,version) skeletons, rollback, staging-DB validation.",
+  "needs": ["N-04"],
+  "jtbds": ["J-01"],
+  "default_mode": "read-only",
+  "destructive_actions": false,
+  "requires_confirmation": false,
+  "outputs": [
+    "custom-hermes-skills/runs/odoo-upgrade-migration-planner/<from>-to-<to>-<ts>.md"
+  ]
+}

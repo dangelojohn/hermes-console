@@ -1,0 +1,16 @@
+{
+  "name": "skill-factory-custom",
+  "version": "0.1.0",
+  "category": "meta",
+  "summary": "Generate new Hermes-compatible skills from a documented procedure + a category + Need/JTBD anchors.",
+  "needs": ["N-18"],
+  "jtbds": ["J-11", "J-12"],
+  "default_mode": "read-only",
+  "destructive_actions": true,
+  "requires_confirmation": true,
+  "outputs": [
+    "custom-hermes-skills/skills/<name>/SKILL.md",
+    "custom-hermes-skills/skills/<name>/metadata.json",
+    "custom-hermes-skills/skills/<name>/SOURCE_INSPIRATION.md"
+  ]
+}
