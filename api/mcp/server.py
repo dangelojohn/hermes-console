@@ -31,7 +31,11 @@ class MCPServer:
         self._handlers: Dict[str, Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]]] = {
             "initialize": self._handle_initialize,
             "tools/list": self._handle_tools_list,
+            "tools/call": self._handle_tools_call,
         }
+        from api.mcp.tools import list_tools as _list_tools, call_tool as _call_tool
+        self._list_tools = _list_tools
+        self._call_tool = _call_tool
 
     async def _handle_initialize(self, params: Dict[str, Any]) -> Dict[str, Any]:
         return {
@@ -45,8 +49,17 @@ class MCPServer:
         }
 
     async def _handle_tools_list(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        # Tools are registered in later tasks; for now return empty.
-        return {"tools": []}
+        return {"tools": self._list_tools()}
+
+    async def _handle_tools_call(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        name = params.get("name")
+        arguments = params.get("arguments") or {}
+        if not name:
+            raise ValueError("tools/call requires 'name'")
+        return await self._call_tool(
+            self._store, client_id=self._client_id,
+            tool_name=name, arguments=arguments,
+        )
 
     async def dispatch(self, message: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         method = message.get("method")
