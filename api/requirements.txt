@@ -6,3 +6,4 @@ pydantic-settings==2.6.1
 tenacity==9.0.0
 mcp==1.9.0
 argon2-cffi==23.1.0
+PyJWT==2.9.0

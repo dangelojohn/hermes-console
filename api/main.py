@@ -27,10 +27,15 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Dict, List, Mapping, Optional
 
-from fastapi import Body, Depends, FastAPI, HTTPException, Query, Request, status
+from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+
+try:  # pragma: no cover - import-time guard
+    import jwt as _pyjwt  # PyJWT
+except ImportError:  # pragma: no cover
+    _pyjwt = None  # type: ignore[assignment]
 
 from .agent_loops import (
     AgentEnv,
@@ -40,6 +45,7 @@ from .agent_loops import (
     execute_loop,
 )
 from .auth import Principal, require_auth
+from .hermes_agent import run_agent_loop
 from .hub_manifest import HubStore
 from .llm import (
     GeminiGroundedClient,
@@ -59,6 +65,7 @@ from .models import (
     ChatThreadCreate,
     FlushResponse,
     HealthResponse,
+    HermesAskRequest,
     LLMHealth,
     QueueRecommendationFromMessageIn,
     QueuedPush,
@@ -74,7 +81,7 @@ from .models import (
 )
 from .queue import OutboundQueue
 from .tenant_bridges import HomeAssistantBridge, SouthbrookHermesBridge
-from .tenant_bridges.base import TenantBridge
+from .tenant_bridges.base import BridgeRejected, BridgeUnreachable, TenantBridge
 from .whatsapp import (
     InboundCommand,
     WhatsAppClient,
@@ -300,6 +307,22 @@ def _settings(request: Request) -> Settings:
 
 def _runner(request: Request) -> AgentLoopRunner:
     return request.app.state.agent_runner
+
+
+def _extract_bearer(authorization: str) -> str:
+    """Return the token from an ``Authorization: Bearer <token>`` header.
+
+    Raises :class:`HTTPException` 401 when the header is missing, blank,
+    or doesn't lead with the ``Bearer `` scheme. Kept case-insensitive on
+    the scheme name — RFC 7235 says it MUST be — and stripped of any
+    trailing whitespace before returning.
+    """
+
+    if not authorization:
+        raise HTTPException(status_code=401, detail="missing_bearer_token")
+    if not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="missing_bearer_token")
+    return authorization[len("bearer "):].strip()
 
 
 # ---------------------------------------------------------------------------
@@ -721,6 +744,117 @@ def _register_routes(app: FastAPI) -> None:
                 detail=f"local store unavailable: {exc}",
             ) from exc
         return Recommendation(**rec)
+
+    # ---------------- Southbrook Hermes ask (Fabio) ----------------
+
+    @app.post("/api/hermes/ask")
+    async def hermes_ask(
+        request: Request,
+        body: HermesAskRequest,
+        authorization: str = Header(default="", alias="Authorization"),
+    ) -> StreamingResponse:
+        """Fabio's tool-using ask surface for the southbrook_hermes addon.
+
+        Wire: ``POST /api/hermes/ask`` with ``Authorization: Bearer <jwt>``
+        and body ``{"q": <question>, "order_id": <optional int>}``. The
+        JWT is minted + signed by the southbrook_hermes addon (HS256
+        against ``southbrook_hermes.jwt_secret`` — same secret this
+        sidecar carries as ``SOUTHBROOK_HERMES_JWT_SECRET``); this route
+        does its own verification, so it deliberately does NOT depend on
+        :func:`require_auth`.
+
+        Response: ``text/plain`` stream of Fabio's answer. Runs a bounded
+        (max 6-iteration) agent loop against the JWT-scoped tool
+        catalog exposed by the addon at ``/api/hermes/tools*``.
+        """
+
+        if _pyjwt is None:  # pragma: no cover - import-guard
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "sidecar_not_configured: PyJWT not installed — add "
+                    "'PyJWT>=2.8' to api/requirements.txt and rebuild."
+                ),
+            )
+
+        settings = _settings(request)
+        secret = settings.southbrook_hermes_jwt_secret
+        if not secret:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "sidecar_not_configured: SOUTHBROOK_HERMES_JWT_SECRET "
+                    "is not set in the sidecar env."
+                ),
+            )
+
+        token = _extract_bearer(authorization)
+        try:
+            claims = _pyjwt.decode(token, secret, algorithms=["HS256"])
+        except _pyjwt.ExpiredSignatureError as exc:
+            raise HTTPException(status_code=401, detail="token_expired") from exc
+        except _pyjwt.InvalidTokenError as exc:
+            raise HTTPException(
+                status_code=401, detail=f"invalid_token: {exc}"
+            ) from exc
+
+        tenant = claims.get("tenant") or ""
+        if tenant != "southbrook":
+            raise HTTPException(status_code=403, detail="wrong_tenant")
+
+        persona = claims.get("persona")
+        tier = claims.get("tier")
+        partner_id = claims.get("partner_id")
+
+        bridges = _bridges(request)
+        bridge = bridges.get("southbrook_hermes")
+        if bridge is None:
+            raise HTTPException(
+                status_code=503,
+                detail="southbrook_hermes bridge not configured",
+            )
+
+        # Fetch the persona/tier-filtered tool catalog up-front so we can
+        # bake it into the system prompt AND the OpenAI tools[] array. A
+        # failure here is not recoverable (no tools = degraded Fabio),
+        # so we surface 502 rather than pretending everything's fine.
+        try:
+            tool_catalog = await bridge.list_tools(jwt=token)
+        except BridgeRejected as exc:
+            raise HTTPException(
+                status_code=502, detail=f"tools_list_rejected: {exc}"
+            ) from exc
+        except BridgeUnreachable as exc:
+            raise HTTPException(
+                status_code=502, detail=f"tools_list_unreachable: {exc}"
+            ) from exc
+
+        providers = _providers(request)
+        provider_name = settings.hermes_primary_provider
+        if not providers.has(provider_name):
+            raise HTTPException(
+                status_code=503,
+                detail=f"provider {provider_name!r} not configured",
+            )
+        llm = providers.get(provider_name)
+
+        async def _stream():
+            async for chunk in run_agent_loop(
+                llm=llm,
+                bridge=bridge,
+                jwt=token,
+                persona=persona,
+                tier=tier,
+                partner_id=partner_id,
+                tools=tool_catalog,
+                question=body.q,
+                order_id=body.order_id,
+                max_iterations=6,
+            ):
+                if chunk:
+                    yield chunk
+
+        return StreamingResponse(_stream(), media_type="text/plain")
 
     # ---------------- Tenant bridges ----------------
 

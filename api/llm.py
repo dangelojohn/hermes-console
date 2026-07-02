@@ -78,6 +78,12 @@ class ChatResponse:
     content: str
     model: str
     usage: Dict[str, int]
+    # OpenAI-format tool_calls forwarded by the assistant, when the caller
+    # passed a ``tools=[...]`` kwarg to ``chat()`` and the model decided to
+    # invoke one. Populated only when the response's ``message.tool_calls``
+    # field is non-empty; otherwise ``None`` for backward-compat with the
+    # many existing callers that only care about ``.content``.
+    tool_calls: Optional[List[Dict[str, Any]]] = None
 
 
 class LLMClient:
@@ -215,6 +221,14 @@ class LLMClient:
         msg = first.get("message") or {}
         content = msg.get("content") or ""
         usage = data.get("usage") or {}
+        # Forward OpenAI-format tool_calls when present. Callers that don't
+        # pass ``tools=[...]`` will never see a populated list; callers that
+        # do (the /api/hermes/ask agent loop) need the full call envelope
+        # so they can echo it back in the next-turn message history.
+        raw_tool_calls = msg.get("tool_calls")
+        tool_calls: Optional[List[Dict[str, Any]]] = (
+            list(raw_tool_calls) if isinstance(raw_tool_calls, list) and raw_tool_calls else None
+        )
 
         return ChatResponse(
             content=content,
@@ -224,6 +238,7 @@ class LLMClient:
                 "completion_tokens": int(usage.get("completion_tokens") or 0),
                 "total_tokens": int(usage.get("total_tokens") or 0),
             },
+            tool_calls=tool_calls,
         )
 
     # ------------------------------------------------------------------

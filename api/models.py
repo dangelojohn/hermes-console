@@ -96,6 +96,16 @@ class Settings(BaseSettings):
     southbrook_hermes_api_key: str = Field(
         default="", alias="SOUTHBROOK_HERMES_API_KEY"
     )
+    # HS256 shared secret used to verify Bearer JWTs POSTed by the
+    # southbrook_hermes addon's ``/hermes/v1/ask`` proxy at
+    # ``POST /api/hermes/ask``. Must match Odoo's
+    # ``southbrook_hermes.jwt_secret`` ir.config_parameter exactly; a
+    # mismatch produces 401 ``invalid_token: Signature verification
+    # failed`` on every ask request. Empty → the ask endpoint responds
+    # 503 ``sidecar_not_configured``.
+    southbrook_hermes_jwt_secret: str = Field(
+        default="", alias="SOUTHBROOK_HERMES_JWT_SECRET"
+    )
 
     # --- Home Assistant tenant bridge ---
     # When enabled, approved recommendations get pushed to a Home Assistant
@@ -461,6 +471,18 @@ class QueueRecommendationFromMessageIn(BaseModel):
     priority: Priority = "normal"
     summary: Optional[str] = None
     tenant_hint: Optional[str] = None
+
+
+class HermesAskRequest(BaseModel):
+    """Body posted to ``POST /api/hermes/ask`` by the southbrook_hermes proxy.
+
+    The proxy embeds the caller's persona/tier/partner in a signed JWT
+    passed in the ``Authorization: Bearer <token>`` header — this body is
+    just the free-form question + optional order context.
+    """
+
+    q: str
+    order_id: Optional[int] = None
 
 
 # ---------------------------------------------------------------------------

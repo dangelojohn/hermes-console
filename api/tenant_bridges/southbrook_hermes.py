@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import httpx
 
@@ -264,6 +264,156 @@ class SouthbrookHermesBridge:
             "recommendation_id": rec_id if isinstance(rec_id, int) else None,
             "raw": data,
         }
+
+    # ------------------------------------------------------------------
+    # JWT-bearer tool surface (used by /api/hermes/ask agent loop)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _redact_jwt(jwt_token: str) -> str:
+        """Return a short prefix of a JWT for structured logging.
+
+        JWTs are self-contained bearer credentials — leaking one to a log
+        file is the same as leaking a session cookie. We keep the first 8
+        chars so an operator can spot the persona-band header in-flight,
+        no more.
+        """
+
+        if not jwt_token:
+            return "<empty>"
+        if len(jwt_token) <= 8:
+            return "<redacted>"
+        return f"{jwt_token[:8]}…"
+
+    async def list_tools(self, *, jwt: str) -> List[Dict[str, Any]]:
+        """Fetch the persona/tier-filtered tool catalog via JWT-bearer auth.
+
+        Wire: ``GET /api/hermes/tools`` with ``Authorization: Bearer <jwt>``.
+        The Odoo side (``hermes_tools_api.py``) decodes the JWT, resolves
+        the persona + tier from the claims, and returns a ``{tenant,
+        persona, tier, tools}`` envelope where ``tools`` is a list of tool
+        descriptors matching this caller's registry membership.
+
+        Returns the ``tools`` list. Raises :class:`BridgeRejected` on
+        4xx (auth/scope error) and :class:`BridgeUnreachable` on
+        transport failure or 5xx.
+        """
+
+        client = await self._ensure_client()
+        try:
+            resp = await client.get(
+                "/api/hermes/tools",
+                headers={"Authorization": f"Bearer {jwt}"},
+                timeout=DEFAULT_TIMEOUT,
+            )
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
+            raise BridgeUnreachable(
+                f"southbrook_hermes tools transport: {exc.__class__.__name__}"
+            ) from exc
+        except httpx.RequestError as exc:
+            raise BridgeUnreachable(
+                f"southbrook_hermes tools request: {exc.__class__.__name__}"
+            ) from exc
+
+        if resp.status_code >= 500:
+            raise BridgeUnreachable(
+                f"southbrook_hermes tools 5xx: {resp.status_code}"
+            )
+        if resp.status_code >= 400:
+            raise BridgeRejected(
+                f"southbrook_hermes tools {resp.status_code}: {resp.text[:300]}"
+            )
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            raise BridgeUnreachable(
+                f"southbrook_hermes tools non-json: {exc}"
+            ) from exc
+
+        tools = data.get("tools") if isinstance(data, dict) else None
+        if not isinstance(tools, list):
+            raise BridgeRejected(
+                "southbrook_hermes tools response missing 'tools' list"
+            )
+        logger.info(
+            "southbrook_hermes list_tools ok jwt=%s count=%d",
+            self._redact_jwt(jwt),
+            len(tools),
+        )
+        return tools
+
+    async def call_tool(
+        self,
+        slug: str,
+        *,
+        jwt: str,
+        args: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Execute one tool by slug on the Odoo side.
+
+        Wire: ``POST /api/hermes/tools/<slug>`` with the JWT in the
+        ``Authorization`` header and the tool's arguments as the JSON
+        body. Odoo re-binds claim-derived args (``persona``,
+        ``partner_id``, ``tenant``) authoritatively — the LLM can't
+        spoof them even if it hallucinates values for them.
+
+        Returns the raw response dict. Raises :class:`BridgeRejected`
+        on 4xx (auth, unknown slug, tier scope) and
+        :class:`BridgeUnreachable` on transport failure or 5xx.
+        """
+
+        client = await self._ensure_client()
+        try:
+            resp = await client.post(
+                f"/api/hermes/tools/{slug}",
+                json=args or {},
+                headers={
+                    "Authorization": f"Bearer {jwt}",
+                    "Content-Type": "application/json",
+                },
+                timeout=DEFAULT_TIMEOUT,
+            )
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
+            raise BridgeUnreachable(
+                f"southbrook_hermes call_tool transport: {exc.__class__.__name__}"
+            ) from exc
+        except httpx.RequestError as exc:
+            raise BridgeUnreachable(
+                f"southbrook_hermes call_tool request: {exc.__class__.__name__}"
+            ) from exc
+
+        if resp.status_code >= 500:
+            logger.warning(
+                "southbrook_hermes call_tool slug=%s jwt=%s status=%d",
+                slug, self._redact_jwt(jwt), resp.status_code,
+            )
+            raise BridgeUnreachable(
+                f"southbrook_hermes call_tool 5xx: {resp.status_code}"
+            )
+        if resp.status_code >= 400:
+            logger.info(
+                "southbrook_hermes call_tool slug=%s jwt=%s rejected=%d",
+                slug, self._redact_jwt(jwt), resp.status_code,
+            )
+            raise BridgeRejected(
+                f"southbrook_hermes call_tool {slug} {resp.status_code}: "
+                f"{resp.text[:300]}"
+            )
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            raise BridgeRejected(
+                f"southbrook_hermes call_tool non-json: {exc}"
+            ) from exc
+        if not isinstance(data, dict):
+            raise BridgeRejected(
+                f"southbrook_hermes call_tool {slug} non-object result"
+            )
+        logger.info(
+            "southbrook_hermes call_tool slug=%s jwt=%s status=%d",
+            slug, self._redact_jwt(jwt), resp.status_code,
+        )
+        return data
 
     # ------------------------------------------------------------------
     # Payload mapping
