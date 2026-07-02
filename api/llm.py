@@ -16,7 +16,9 @@ first 8 chars so an operator can still tell which key was loaded.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -594,6 +596,22 @@ class AnthropicLLMClient:
             if k in opts and opts[k] is not None:
                 body[k] = opts[k]
 
+        # ---- Tool translation (request side) -----------------------------
+        # The Hermes agent loop passes OpenAI-format ``tools=[...]`` and
+        # ``tool_choice=...``. Anthropic's Messages API takes ``tools`` at
+        # top level with a different schema (``input_schema`` rather than
+        # ``function.parameters``) and a differently shaped ``tool_choice``.
+        raw_tools = opts.get("tools")
+        if raw_tools:
+            anthropic_tools = self._openai_tools_to_anthropic(raw_tools)
+            if anthropic_tools:
+                body["tools"] = anthropic_tools
+        raw_choice = opts.get("tool_choice")
+        if raw_choice is not None:
+            translated_choice = self._openai_tool_choice_to_anthropic(raw_choice)
+            if translated_choice is not None:
+                body["tool_choice"] = translated_choice
+
         try:
             resp = await client.post("/messages", json=body)
         except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
@@ -623,13 +641,38 @@ class AnthropicLLMClient:
         except ValueError as exc:
             raise LLMUnavailable("anthropic: non-json response") from exc
 
+        # ---- Response parse ---------------------------------------------
+        # Walk Anthropic's content-block array. Text blocks are concatenated
+        # into ``content``; ``tool_use`` blocks are converted into
+        # OpenAI-shape ``tool_calls`` so ``run_agent_loop`` in
+        # hermes_agent.py works with Claude the same way it works with
+        # OpenAI/Gemini. Order between blocks isn't semantically meaningful
+        # to the OpenAI tool-calling shape (tool_calls is a sibling to
+        # content, not interleaved), so joining text is fine.
         content_blocks = data.get("content") or []
-        text_parts = [
-            b.get("text", "")
-            for b in content_blocks
-            if isinstance(b, dict) and b.get("type") == "text"
-        ]
-        content = "".join(text_parts)
+        text_parts: List[str] = []
+        tool_calls: List[Dict[str, Any]] = []
+        for block in content_blocks:
+            if not isinstance(block, dict):
+                continue
+            btype = block.get("type")
+            if btype == "text":
+                text_parts.append(block.get("text") or "")
+            elif btype == "tool_use":
+                # Anthropic's ``input`` is a native dict; OpenAI expects
+                # ``arguments`` as a JSON-encoded string.
+                args_str = json.dumps(block.get("input") or {})
+                tool_calls.append({
+                    "id": block.get("id") or f"toolu_{uuid.uuid4().hex}",
+                    "type": "function",
+                    "function": {
+                        "name": block.get("name") or "",
+                        "arguments": args_str,
+                    },
+                })
+
+        content = "".join(text_parts).strip() or ""
+        final_tool_calls: Optional[List[Dict[str, Any]]] = tool_calls or None
         usage = data.get("usage") or {}
         # Translate Anthropic's input/output_tokens → OpenAI-shape totals
         # so downstream code (analytics, accounting) doesn't need to know
@@ -644,28 +687,183 @@ class AnthropicLLMClient:
                 "completion_tokens": completion,
                 "total_tokens": prompt + completion,
             },
+            tool_calls=final_tool_calls,
         )
+
+    @staticmethod
+    def _openai_tools_to_anthropic(
+        openai_tools: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Translate OpenAI ``tools=[...]`` schema into Anthropic's shape.
+
+        OpenAI: ``{"type": "function", "function": {"name", "description",
+        "parameters"}}``. Anthropic: ``{"name", "description",
+        "input_schema"}``. Tools missing a name are silently dropped —
+        keeps a malformed catalog entry from 400-ing the whole call.
+        """
+        out: List[Dict[str, Any]] = []
+        for t in openai_tools or []:
+            if not isinstance(t, dict):
+                continue
+            fn = t.get("function") or {}
+            if not isinstance(fn, dict):
+                fn = {}
+            name = fn.get("name") or t.get("name")
+            if not name:
+                continue
+            schema = (
+                fn.get("parameters")
+                or t.get("parameters")
+                or {"type": "object", "properties": {}}
+            )
+            out.append({
+                "name": name,
+                "description": fn.get("description") or t.get("description") or "",
+                "input_schema": schema,
+            })
+        return out
+
+    @staticmethod
+    def _openai_tool_choice_to_anthropic(
+        choice: Any,
+    ) -> Optional[Dict[str, Any]]:
+        """Translate OpenAI ``tool_choice`` into Anthropic's shape.
+
+        OpenAI shapes → Anthropic:
+          * ``"auto"`` → ``{"type": "auto"}`` (Anthropic's default when
+            omitted, but explicit form is accepted and clearer).
+          * ``"none"`` → return None (Anthropic doesn't accept "none" —
+            just don't pass ``tool_choice`` and don't send ``tools`` at
+            all; here we drop the choice and the caller decides).
+          * ``"required"``/``"any"`` → ``{"type": "any"}``
+          * ``{"type":"function","function":{"name":"X"}}`` →
+            ``{"type": "tool", "name": "X"}``
+        """
+        if isinstance(choice, str):
+            low = choice.lower()
+            if low == "auto":
+                return {"type": "auto"}
+            if low in ("required", "any"):
+                return {"type": "any"}
+            # "none" or unknown — omit
+            return None
+        if isinstance(choice, dict):
+            if choice.get("type") == "function":
+                fn = choice.get("function") or {}
+                name = fn.get("name") if isinstance(fn, dict) else None
+                if name:
+                    return {"type": "tool", "name": name}
+            # Already Anthropic-shaped? Pass through if it looks valid.
+            if choice.get("type") in ("auto", "any", "tool"):
+                return choice
+        return None
 
     @staticmethod
     def _split_messages(
         messages: List[Dict[str, Any]],
     ) -> tuple[str, List[Dict[str, Any]]]:
-        """Extract OpenAI-style system messages into Anthropic's top-level field.
+        """Split OpenAI-shape messages into (system_text, anthropic_messages).
 
         Anthropic puts the system prompt at the request root, not as the
-        first message. We concatenate any system messages (newline-joined)
-        and keep only user/assistant turns in ``messages``.
+        first message. Additionally, this method translates two
+        tool-calling shapes that come from the OpenAI world into
+        Anthropic's block-based shape:
+
+          * ``role="tool"`` messages (a tool result posted back to the
+            model) become ``{"role":"user","content":[{"type":
+            "tool_result","tool_use_id":<id>,"content":<str>}]}`` blocks.
+            Consecutive tool results get folded into a single user turn,
+            which is what Anthropic expects (a tool-result must directly
+            follow the assistant tool_use turn as a user turn).
+          * ``role="assistant"`` messages with a ``tool_calls`` field
+            become ``{"role":"assistant","content":[{"type":"text",...},
+            {"type":"tool_use","id":...,"name":...,"input":...}, ...]}``.
         """
         system_parts: List[str] = []
         out: List[Dict[str, Any]] = []
+        # Buffer for consecutive tool results — Anthropic wants them in
+        # the same user turn as multiple tool_result blocks.
+        pending_tool_results: List[Dict[str, Any]] = []
+
+        def _flush_tool_results() -> None:
+            if pending_tool_results:
+                out.append({
+                    "role": "user",
+                    "content": list(pending_tool_results),
+                })
+                pending_tool_results.clear()
+
         for m in messages:
             role = m.get("role")
             if role == "system":
+                _flush_tool_results()
                 content = m.get("content") or ""
                 if isinstance(content, str) and content:
                     system_parts.append(content)
-            elif role in ("user", "assistant"):
-                out.append({"role": role, "content": m.get("content") or ""})
+                continue
+
+            if role == "tool":
+                # Buffer for potential folding with adjacent tool results.
+                raw_content = m.get("content")
+                if isinstance(raw_content, str):
+                    tr_content: Any = raw_content
+                elif raw_content is None:
+                    tr_content = ""
+                else:
+                    # Non-string (dict / list) — stringify. Anthropic accepts
+                    # a string, or a list of content blocks; keeping the
+                    # simple string form matches how run_agent_loop encodes
+                    # results (``json.dumps(result)``).
+                    tr_content = json.dumps(raw_content, default=str)
+                pending_tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": m.get("tool_call_id") or "",
+                    "content": tr_content,
+                })
+                continue
+
+            _flush_tool_results()
+
+            if role == "user":
+                out.append({"role": "user", "content": m.get("content") or ""})
+                continue
+
+            if role == "assistant":
+                tool_calls = m.get("tool_calls") or []
+                text = m.get("content")
+                if tool_calls:
+                    blocks: List[Dict[str, Any]] = []
+                    if isinstance(text, str) and text:
+                        blocks.append({"type": "text", "text": text})
+                    for call in tool_calls:
+                        if not isinstance(call, dict):
+                            continue
+                        fn = call.get("function") or {}
+                        name = fn.get("name") if isinstance(fn, dict) else None
+                        raw_args = fn.get("arguments") if isinstance(fn, dict) else None
+                        if isinstance(raw_args, str):
+                            try:
+                                parsed_args = json.loads(raw_args) if raw_args else {}
+                            except ValueError:
+                                parsed_args = {}
+                        elif isinstance(raw_args, dict):
+                            parsed_args = raw_args
+                        else:
+                            parsed_args = {}
+                        blocks.append({
+                            "type": "tool_use",
+                            "id": call.get("id") or f"toolu_{uuid.uuid4().hex}",
+                            "name": name or "",
+                            "input": parsed_args,
+                        })
+                    out.append({"role": "assistant", "content": blocks})
+                else:
+                    out.append({"role": "assistant", "content": text or ""})
+                continue
+
+            # Unknown role — drop it silently rather than crash.
+
+        _flush_tool_results()
         return "\n\n".join(system_parts), out
 
     async def health(self) -> str:
