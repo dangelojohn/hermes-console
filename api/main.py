@@ -829,8 +829,23 @@ def _register_routes(app: FastAPI) -> None:
                 status_code=502, detail=f"tools_list_unreachable: {exc}"
             ) from exc
 
+        # Force the OpenAI-compatible provider for the ask endpoint.
+        # Southbrook Fabio uses free-tier Gemini 2.5 Flash (wired via
+        # OpenAI-compat shim behind provider="openai") because it
+        # supports the OpenAI function-calling wire format that
+        # run_agent_loop parses. The Anthropic provider emits Claude's
+        # XML-style function_calls in the assistant text stream instead
+        # of structured tool_calls, which agent-loop misses → tool
+        # invocations leak to the user as unreadable pseudo-XML.
+        # A future improvement is to teach run_agent_loop the Anthropic
+        # tool-call schema and add HERMES_ASK_PROVIDER as a per-endpoint
+        # override; today's smaller fix keeps Gemini as the ask brain.
         providers = _providers(request)
-        provider_name = settings.hermes_primary_provider
+        provider_name = "openai"
+        if not providers.has(provider_name):
+            # Graceful fallback so the deploy doesn't break in a
+            # provider config without an OpenAI-compat entry.
+            provider_name = settings.hermes_primary_provider
         if not providers.has(provider_name):
             raise HTTPException(
                 status_code=503,
